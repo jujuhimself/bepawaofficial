@@ -1,56 +1,56 @@
-import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MapPin, Search, Star, Clock, Phone, ShoppingCart } from "lucide-react";
-import PharmacyCard from "@/components/PharmacyCard";
-import PharmacyStockDialog from "@/components/PharmacyStockDialog";
-import PageHeader from "@/components/PageHeader";
-import EmptyState from "@/components/EmptyState";
+import React, { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { MapPin, Search } from "lucide-react";
+import PharmacyCard from "../components/PharmacyCard";
+import PharmacyStockDialog from "../components/PharmacyStockDialog";
+import PageHeader from "../components/PageHeader";
+import EmptyState from "../components/EmptyState";
+import { supabase } from "../integrations/supabase/client";
+import LoadingState from "../components/LoadingState";
+
+const fetchPharmacies = async () => {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, business_name, region, city, is_approved, address, phone')
+    .eq('role', 'retail')
+    .eq('is_approved', true);
+  if (error) throw new Error(error.message);
+  return data || [];
+};
 
 const PharmacyDirectory = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedPharmacy, setSelectedPharmacy] = useState<any>(null);
-  const [orderModal, setOrderModal] = useState(false);
-  const [selectedMedicine, setSelectedMedicine] = useState("");
-  const [quantity, setQuantity] = useState(1);
 
-  // Empty pharmacies list - no mock data
-  const pharmacies: any[] = [];
+  const { data: pharmacies, isLoading, isError } = useQuery({
+    queryKey: ['pharmacies'],
+    queryFn: fetchPharmacies,
+  });
 
-  const filteredPharmacies = pharmacies.filter(pharmacy =>
-    pharmacy.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    pharmacy.location.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredPharmacies = (pharmacies || []).filter(pharmacy =>
+    (pharmacy.business_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (pharmacy.city || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (pharmacy.region || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleOrder = () => {
-    if (selectedMedicine && quantity > 0) {
-      // Place order logic stub
-      setOrderModal(false);
-      setSelectedMedicine("");
-      setQuantity(1);
-      alert("Order placed successfully!");
-    }
-  };
-
+  if (isLoading) return <LoadingState />;
+  if (isError) return <EmptyState title="Error" description="Could not fetch pharmacies." icon={<MapPin className="h-16 w-16" />} />;
+  
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50">
+    <div className="min-h-screen">
       <div className="container mx-auto px-4 py-8">
         <PageHeader 
           title="Find Pharmacies"
           description="Discover nearby pharmacies and order medicines"
-          badge={{ text: "Healthcare", variant: "outline" }}
         />
         
-        {/* Search Bar */}
         <div className="mb-8">
           <div className="relative max-w-2xl mx-auto">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
             <Input
-              placeholder="Search by pharmacy name or location..."
+              placeholder="Search by name, city, or region..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10 h-12 text-lg"
@@ -58,65 +58,38 @@ const PharmacyDirectory = () => {
           </div>
         </div>
         
-        {/* Pharmacy Grid */}
         {filteredPharmacies.length === 0 ? (
           <EmptyState
             title="No pharmacies found"
-            description="Pharmacy directory will be populated as pharmacies join the platform. Check back soon for available pharmacies in your area."
+            description="No pharmacies match your search. Check back soon!"
             icon={<MapPin className="h-16 w-16" />}
-            variant="card"
           />
         ) : (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredPharmacies.map((pharmacy) => (
               <PharmacyCard
                 key={pharmacy.id}
-                pharmacy={pharmacy}
+                pharmacy={{
+                  id: pharmacy.id,
+                  name: pharmacy.business_name,
+                  location: `${pharmacy.city}, ${pharmacy.region}`,
+                  rating: 4.5, // placeholder
+                  isOpen: true, // placeholder
+                  phone: pharmacy.phone,
+                  address: pharmacy.address,
+                }}
                 onViewStock={() => setSelectedPharmacy(pharmacy)}
               />
             ))}
           </div>
         )}
         
-        {/* Pharmacy Details Modal */}
         <PharmacyStockDialog
           open={!!selectedPharmacy}
           onOpenChange={() => setSelectedPharmacy(null)}
-          pharmacyName={selectedPharmacy?.name}
-          stock={selectedPharmacy?.stock}
-          onOrder={(medicine: string) => {
-            setSelectedMedicine(medicine);
-            setOrderModal(true);
-          }}
+          pharmacyName={selectedPharmacy?.business_name}
+          pharmacyId={selectedPharmacy?.id}
         />
-        
-        {/* Order Modal */}
-        <Dialog open={orderModal} onOpenChange={setOrderModal}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Order Medicine</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-2">Medicine</label>
-                <Input value={selectedMedicine} readOnly />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">Quantity</label>
-                <Input 
-                  type="number" 
-                  value={quantity} 
-                  onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
-                  min="1"
-                />
-              </div>
-              <div className="flex space-x-2">
-                <Button onClick={handleOrder} className="flex-1">Confirm Order</Button>
-                <Button variant="outline" onClick={() => setOrderModal(false)}>Cancel</Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
       </div>
     </div>
   );

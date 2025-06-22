@@ -1,44 +1,40 @@
+import React from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { useAuth } from '@/contexts/AuthContext';
+import { Clock, Mail } from 'lucide-react';
 
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { AlertCircle, LogOut } from "lucide-react";
+const WholesalePendingApprovalNotice = () => {
+  const { logout } = useAuth();
 
-interface PendingApprovalNoticeProps {
-  logout: () => void;
-}
-
-const WholesalePendingApprovalNotice = ({ logout }: PendingApprovalNoticeProps) => {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50 flex items-center justify-center">
-      <div className="container mx-auto px-4">
-        <Card className="max-w-2xl mx-auto">
-          <CardContent className="p-8 text-center">
-            <AlertCircle className="h-16 w-16 text-orange-500 mx-auto mb-6" />
-            <h1 className="text-3xl font-bold text-gray-900 mb-4">
-              Account Pending Approval
-            </h1>
-            <p className="text-gray-600 text-lg mb-6">
-              Your wholesale account is currently under review. Our team will verify your 
-              business credentials and approve your account within 2-3 business days.
-            </p>
-            <div className="bg-blue-50 p-6 rounded-lg mb-6">
-              <h3 className="font-semibold text-blue-900 mb-2">What happens next?</h3>
-              <ul className="text-sm text-blue-800 space-y-2 text-left">
-                <li>• We'll verify your business license and credentials</li>
-                <li>• Our team will contact you if additional information is needed</li>
-                <li>• You'll receive an email notification once approved</li>
-                <li>• Full platform access will be granted immediately upon approval</li>
-              </ul>
-            </div>
-            <div className="flex justify-center gap-4">
-              <Button onClick={logout} variant="outline">
-                <LogOut className="h-4 w-4 mr-2" />
-                Sign Out
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+    <div className="container mx-auto py-12 flex items-center justify-center">
+      <Card className="w-full max-w-lg text-center">
+        <CardHeader>
+          <div className="mx-auto bg-yellow-100 rounded-full p-3 w-fit">
+            <Clock className="h-8 w-8 text-yellow-600" />
+          </div>
+          <CardTitle className="mt-4">Account Pending Approval</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-gray-600">
+            Thank you for registering. Your wholesale account is currently under review by our team. 
+            You will be notified via email once your account has been approved.
+          </p>
+          <p className="text-sm text-gray-500">
+            This usually takes 1-2 business days.
+          </p>
+          <div className="flex justify-center space-x-4 pt-4">
+            <Button variant="outline" onClick={logout}>
+              Log Out
+            </Button>
+            <Button>
+              <Mail className="mr-2 h-4 w-4" />
+              Contact Support
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 };

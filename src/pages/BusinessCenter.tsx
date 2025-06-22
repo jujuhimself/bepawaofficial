@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,6 +14,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { Link } from "react-router-dom";
 
 const BusinessCenter = () => {
   const { user } = useAuth();
@@ -23,7 +23,7 @@ const BusinessCenter = () => {
     monthlyRevenue: 0,
     activeCustomers: 0,
     ordersThisMonth: 0,
-    growthRate: 0
+    growthRate: null // null means not shown
   });
 
   useEffect(() => {
@@ -51,16 +51,14 @@ const BusinessCenter = () => {
       const ordersThisMonth = ordersData?.length || 0;
       const activeCustomers = new Set(ordersData?.map(o => o.user_id)).size;
 
-      // Simulate growth rate (in real app, compare with previous month)
-      const growthRate = Math.random() * 30; // Random for demo
-
       setBusinessMetrics({
         monthlyRevenue,
         activeCustomers,
         ordersThisMonth,
-        growthRate
+        growthRate: null // Not shown
       });
     } catch (error) {
+      setBusinessMetrics({ monthlyRevenue: 0, activeCustomers: 0, ordersThisMonth: 0, growthRate: null });
       console.error('Error fetching business metrics:', error);
       toast({
         title: "Error loading metrics",
@@ -70,36 +68,130 @@ const BusinessCenter = () => {
     }
   };
 
-  const businessTools = [
-    {
-      title: "Analytics Dashboard",
-      description: "Comprehensive business insights and reporting",
-      icon: <BarChart3 className="h-8 w-8 text-blue-600" />,
-      action: "View Analytics",
-      href: "/wholesale/analytics"
-    },
-    {
-      title: "Financial Reports",
-      description: "Generate detailed financial statements",
-      icon: <FileText className="h-8 w-8 text-green-600" />,
-      action: "Generate Reports",
-      href: "/business-tools-retail"
-    },
-    {
-      title: "Schedule Management",
-      description: "Manage appointments and schedules",
-      icon: <Calendar className="h-8 w-8 text-purple-600" />,
-      action: "Manage Schedule",
-      href: "/appointments"
-    },
-    {
-      title: "Business Settings",
-      description: "Configure business preferences",
-      icon: <Settings className="h-8 w-8 text-gray-600" />,
-      action: "Open Settings",
-      href: "/settings"
-    }
-  ];
+  // Role-aware business tools
+  let businessTools = [];
+  if (user?.role === 'retail') {
+    businessTools = [
+      {
+        title: "Analytics Dashboard",
+        description: "Comprehensive business insights and reporting",
+        icon: <BarChart3 className="h-8 w-8 text-blue-600" />,
+        action: "View Analytics",
+        href: "/business-tools-retail/forecast"
+      },
+      {
+        title: "Financial Reports",
+        description: "Generate detailed financial statements",
+        icon: <FileText className="h-8 w-8 text-green-600" />,
+        action: "Generate Reports",
+        href: "/retail/reporting"
+      },
+      {
+        title: "Schedule Management",
+        description: "Manage appointments and schedules",
+        icon: <Calendar className="h-8 w-8 text-purple-600" />,
+        action: "Manage Schedule",
+        href: "/pharmacy/appointments"
+      },
+      {
+        title: "Business Settings",
+        description: "Configure business preferences",
+        icon: <Settings className="h-8 w-8 text-gray-600" />,
+        action: "Open Settings",
+        href: "/settings"
+      }
+    ];
+  } else if (user?.role === 'wholesale') {
+    businessTools = [
+      {
+        title: "Analytics Dashboard",
+        description: "Comprehensive business insights and reporting",
+        icon: <BarChart3 className="h-8 w-8 text-blue-600" />,
+        action: "View Analytics",
+        href: "/wholesale/analytics"
+      },
+      {
+        title: "Financial Reports",
+        description: "Generate detailed financial statements",
+        icon: <FileText className="h-8 w-8 text-green-600" />,
+        action: "Generate Reports",
+        href: "/wholesale/business-tools"
+      },
+      {
+        title: "Business Settings",
+        description: "Configure business preferences",
+        icon: <Settings className="h-8 w-8 text-gray-600" />,
+        action: "Open Settings",
+        href: "/settings"
+      }
+    ];
+  } else if (user?.role === 'lab') {
+    businessTools = [
+      {
+        title: "Analytics Dashboard",
+        description: "Comprehensive business insights and reporting",
+        icon: <BarChart3 className="h-8 w-8 text-blue-600" />,
+        action: "View Analytics",
+        href: "/lab/analytics"
+      },
+      {
+        title: "Schedule Management",
+        description: "Manage appointments and schedules",
+        icon: <Calendar className="h-8 w-8 text-purple-600" />,
+        action: "Manage Schedule",
+        href: "/lab/appointments"
+      },
+      {
+        title: "Business Settings",
+        description: "Configure business preferences",
+        icon: <Settings className="h-8 w-8 text-gray-600" />,
+        action: "Open Settings",
+        href: "/settings"
+      }
+    ];
+  } else if (user?.role === 'admin') {
+    businessTools = [
+      {
+        title: "Analytics Dashboard",
+        description: "Comprehensive business insights and reporting",
+        icon: <BarChart3 className="h-8 w-8 text-blue-600" />,
+        action: "View Analytics",
+        href: "/admin/analytics"
+      },
+      {
+        title: "User Management",
+        description: "Manage users and staff",
+        icon: <Users className="h-8 w-8 text-green-600" />,
+        action: "Manage Users",
+        href: "/admin/users"
+      },
+      {
+        title: "Business Settings",
+        description: "Configure business preferences",
+        icon: <Settings className="h-8 w-8 text-gray-600" />,
+        action: "Open Settings",
+        href: "/settings"
+      }
+    ];
+  } else {
+    // Individual or fallback
+    businessTools = [
+      {
+        title: "Analytics Dashboard",
+        description: "Comprehensive business insights and reporting",
+        icon: <BarChart3 className="h-8 w-8 text-blue-600" />,
+        action: "View Analytics",
+        href: "/individual"
+      },
+      {
+        title: "Business Settings",
+        description: "Configure business preferences",
+        icon: <Settings className="h-8 w-8 text-gray-600" />,
+        action: "Open Settings",
+        href: "/settings"
+      }
+    ];
+  }
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-TZ', {
@@ -119,51 +211,57 @@ const BusinessCenter = () => {
 
         {/* Business Metrics */}
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <Card className="bg-white shadow-lg border-0">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <DollarSign className="h-6 w-6 text-green-600" />
-                <span className="text-sm font-medium text-green-600">+{businessMetrics.growthRate.toFixed(1)}%</span>
-              </div>
-              <h3 className="text-2xl font-bold text-gray-900 mb-1">
-                {formatCurrency(businessMetrics.monthlyRevenue)}
-              </h3>
-              <p className="text-gray-600 text-sm">Monthly Revenue</p>
-            </CardContent>
-          </Card>
+          {businessMetrics.monthlyRevenue === 0 && businessMetrics.ordersThisMonth === 0 ? (
+            <div className="text-gray-500">No data found for this month.</div>
+          ) : (
+            <>
+              <Card className="bg-white shadow-lg border-0">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <DollarSign className="h-6 w-6 text-green-600" />
+                    <span className="text-sm font-medium text-green-600">+{businessMetrics.growthRate?.toFixed(1) || ''}%</span>
+                  </div>
+                  <h3 className="text-2xl font-bold text-gray-900 mb-1">
+                    {formatCurrency(businessMetrics.monthlyRevenue)}
+                  </h3>
+                  <p className="text-gray-600 text-sm">Monthly Revenue</p>
+                </CardContent>
+              </Card>
 
-          <Card className="bg-white shadow-lg border-0">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <Users className="h-6 w-6 text-blue-600" />
-                <span className="text-sm font-medium text-green-600">+8.2%</span>
-              </div>
-              <h3 className="text-2xl font-bold text-gray-900 mb-1">{businessMetrics.activeCustomers}</h3>
-              <p className="text-gray-600 text-sm">Active Customers</p>
-            </CardContent>
-          </Card>
+              <Card className="bg-white shadow-lg border-0">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <Users className="h-6 w-6 text-blue-600" />
+                    <span className="text-sm font-medium text-green-600">+8.2%</span>
+                  </div>
+                  <h3 className="text-2xl font-bold text-gray-900 mb-1">{businessMetrics.activeCustomers}</h3>
+                  <p className="text-gray-600 text-sm">Active Customers</p>
+                </CardContent>
+              </Card>
 
-          <Card className="bg-white shadow-lg border-0">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <ShoppingCart className="h-6 w-6 text-purple-600" />
-                <span className="text-sm font-medium text-green-600">+15.3%</span>
-              </div>
-              <h3 className="text-2xl font-bold text-gray-900 mb-1">{businessMetrics.ordersThisMonth}</h3>
-              <p className="text-gray-600 text-sm">Orders This Month</p>
-            </CardContent>
-          </Card>
+              <Card className="bg-white shadow-lg border-0">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <ShoppingCart className="h-6 w-6 text-purple-600" />
+                    <span className="text-sm font-medium text-green-600">+15.3%</span>
+                  </div>
+                  <h3 className="text-2xl font-bold text-gray-900 mb-1">{businessMetrics.ordersThisMonth}</h3>
+                  <p className="text-gray-600 text-sm">Orders This Month</p>
+                </CardContent>
+              </Card>
 
-          <Card className="bg-white shadow-lg border-0">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <TrendingUp className="h-6 w-6 text-orange-600" />
-                <span className="text-sm font-medium text-green-600">+5.1%</span>
-              </div>
-              <h3 className="text-2xl font-bold text-gray-900 mb-1">{businessMetrics.growthRate.toFixed(1)}%</h3>
-              <p className="text-gray-600 text-sm">Growth Rate</p>
-            </CardContent>
-          </Card>
+              <Card className="bg-white shadow-lg border-0">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <TrendingUp className="h-6 w-6 text-orange-600" />
+                    <span className="text-sm font-medium text-green-600">+5.1%</span>
+                  </div>
+                  <h3 className="text-2xl font-bold text-gray-900 mb-1">{businessMetrics.growthRate?.toFixed(1) || ''}%</h3>
+                  <p className="text-gray-600 text-sm">Growth Rate</p>
+                </CardContent>
+              </Card>
+            </>
+          )}
         </div>
 
         {/* Business Tools */}
@@ -182,9 +280,9 @@ const BusinessCenter = () => {
                     <h3 className="text-lg font-semibold mb-2">{tool.title}</h3>
                     <p className="text-gray-600 mb-4">{tool.description}</p>
                     <Button variant="outline" size="sm" asChild>
-                      <a href={tool.href}>
+                      <Link to={tool.href}>
                         {tool.action}
-                      </a>
+                      </Link>
                     </Button>
                   </div>
                 </div>

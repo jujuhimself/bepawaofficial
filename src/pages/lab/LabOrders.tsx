@@ -1,12 +1,16 @@
 import { useState, useEffect } from "react";
-import { useAuth } from "@/contexts/AuthContext";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { useAuth } from "../../contexts/AuthContext";
+import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
+import { Button } from "../../components/ui/button";
+import { Badge } from "../../components/ui/badge";
 import { TestTube, Calendar, User, Phone, Plus } from "lucide-react";
-import PageHeader from "@/components/PageHeader";
-import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
+import PageHeader from "../../components/PageHeader";
+import { supabase } from "../../integrations/supabase/client";
+import { useToast } from "../../hooks/use-toast";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../../components/ui/dialog";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "../../components/ui/select";
+import { labService } from "../../services/labService";
+import { NewLabOrderDialog } from "../../components/lab/NewLabOrderDialog";
 
 interface LabOrder {
   id: string;
@@ -29,6 +33,11 @@ const LabOrders = () => {
   const { toast } = useToast();
   const [orders, setOrders] = useState<LabOrder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [statusDialogOpen, setStatusDialogOpen] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<LabOrder | null>(null);
+  const [newStatus, setNewStatus] = useState<string>("");
+  const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [isNewOrderDialogOpen, setIsNewOrderDialogOpen] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -37,6 +46,7 @@ const LabOrders = () => {
   }, [user]);
 
   const fetchOrders = async () => {
+    setIsLoading(true);
     try {
       const { data, error } = await supabase
         .from('lab_orders')
@@ -48,7 +58,6 @@ const LabOrders = () => {
 
       if (error) throw error;
 
-      // Transform the data to match our interface
       const typedOrders: LabOrder[] = (data || []).map(order => ({
         id: order.id,
         user_id: order.user_id,
@@ -77,6 +86,11 @@ const LabOrders = () => {
       setIsLoading(false);
     }
   };
+  
+  const handleOrderCreated = () => {
+    fetchOrders();
+    setIsNewOrderDialogOpen(false);
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -86,6 +100,29 @@ const LabOrders = () => {
       case 'completed': return 'bg-green-100 text-green-800';
       case 'cancelled': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const handleOpenStatusDialog = (order: LabOrder) => {
+    setSelectedOrder(order);
+    setNewStatus(order.status);
+    setStatusDialogOpen(true);
+  };
+
+  const handleStatusChange = (value: string) => setNewStatus(value);
+
+  const handleUpdateStatus = async () => {
+    if (!selectedOrder || !newStatus) return;
+    setUpdatingStatus(true);
+    try {
+      await labService.updateLabOrderStatus(selectedOrder.id, newStatus as any);
+      toast({ title: "Status Updated", description: `Order status updated to ${newStatus}.` });
+      setStatusDialogOpen(false);
+      fetchOrders();
+    } catch (e) {
+      toast({ title: "Error", description: "Failed to update status", variant: "destructive" });
+    } finally {
+      setUpdatingStatus(false);
     }
   };
 
@@ -109,7 +146,7 @@ const LabOrders = () => {
         />
 
         <div className="flex justify-end mb-6">
-          <Button>
+          <Button onClick={() => setIsNewOrderDialogOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
             New Order
           </Button>
@@ -187,7 +224,7 @@ const LabOrders = () => {
                     <Button variant="outline" size="sm">
                       View Details
                     </Button>
-                    <Button variant="outline" size="sm">
+                    <Button variant="outline" size="sm" onClick={() => handleOpenStatusDialog(order)}>
                       Update Status
                     </Button>
                   </div>
@@ -196,7 +233,39 @@ const LabOrders = () => {
             ))}
           </div>
         )}
+
+        <Dialog open={statusDialogOpen} onOpenChange={setStatusDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Update Order Status</DialogTitle>
+            </DialogHeader>
+            <div className="mb-4">
+              <Select value={newStatus} onValueChange={handleStatusChange}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="sample_collected">Sample Collected</SelectItem>
+                  <SelectItem value="processing">Processing</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="cancelled">Cancelled</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <DialogFooter>
+              <Button onClick={handleUpdateStatus} disabled={updatingStatus || !newStatus}>
+                {updatingStatus ? "Updating..." : "Update"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
+      <NewLabOrderDialog
+        isOpen={isNewOrderDialogOpen}
+        onClose={() => setIsNewOrderDialogOpen(false)}
+        onOrderCreated={handleOrderCreated}
+      />
     </div>
   );
 };

@@ -1,30 +1,23 @@
+import React from 'react';
+import { useAuth } from '../contexts/AuthContext';
+import { Outlet } from 'react-router-dom';
+import Navbar from './Navbar'; // Assuming Navbar is your main navigation component
+import ChatBot from './ChatBot';
 
-import React from "react";
-import { FooterVersion } from "@/components/FooterVersion";
-import ChatBot from "@/components/ChatBot";
-import Navbar from "@/components/Navbar";
-import { useLocation } from "react-router-dom";
+const AppLayout: React.FC = () => {
+  const { user, isLoading } = useAuth();
 
-interface AppLayoutProps {
-  children: React.ReactNode;
-}
-
-const shouldShowNavbar = (pathname: string) => {
-  // Hide Navbar on dedicated shell/side-bar pages:
-  return !(
-    pathname.startsWith("/business-tools-retail") ||
-    pathname.startsWith("/wholesale/business-tools")
-  );
-};
-
-const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
-  const location = useLocation();
+  if (isLoading) {
+    // Optional: add a global loading spinner here
+    return <div className="h-screen w-screen flex items-center justify-center">Loading...</div>;
+  }
 
   return (
-    <div className="min-h-screen flex flex-col w-full">
-      {shouldShowNavbar(location.pathname) && <Navbar />}
-      <div className="flex-1">{children}</div>
-      <FooterVersion />
+    <div className="min-h-screen bg-gray-50">
+      <Navbar />
+      <main className="px-4 sm:px-6 lg:px-8 py-8">
+        <Outlet />
+      </main>
       <ChatBot />
     </div>
   );

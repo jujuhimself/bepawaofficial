@@ -1,20 +1,25 @@
-
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { appointmentService } from '@/services/appointmentService';
-import { useToast } from '@/hooks/use-toast';
+import { appointmentService } from '../services/appointmentService';
+import { useToast } from './use-toast';
+import { useAuth } from '../contexts/AuthContext';
 
 export const useUserAppointments = (userId: string) => {
+  const { user } = useAuth();
+  
   return useQuery({
-    queryKey: ['appointments', userId],
-    queryFn: () => appointmentService.fetchUserAppointments(userId),
-    enabled: !!userId,
+    queryKey: ['appointments', userId, user?.role],
+    queryFn: () => appointmentService.fetchAppointmentsByRole(userId, user?.role || 'individual'),
+    enabled: !!userId && !!user?.role,
   });
 };
 
 export const useTodaysAppointments = (providerType?: string) => {
+  const { user } = useAuth();
+  
   return useQuery({
-    queryKey: ['appointments', 'today', providerType],
+    queryKey: ['appointments', 'today', providerType, user?.role],
     queryFn: () => appointmentService.fetchTodaysAppointments(providerType),
+    enabled: !!user?.role,
   });
 };
 

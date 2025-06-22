@@ -1,9 +1,8 @@
-
-import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
+import React, { useState, useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Badge } from "../components/ui/badge";
 import { 
   Package, 
   Search, 
@@ -11,89 +10,87 @@ import {
   Edit, 
   AlertTriangle,
   TrendingUp,
-  TrendingDown
+  TrendingDown,
+  Trash2
 } from "lucide-react";
-import { useAuth } from "@/contexts/AuthContext";
-
-interface InventoryItem {
-  id: string;
-  name: string;
-  sku: string;
-  category: string;
-  quantity: number;
-  minStock: number;
-  maxStock: number;
-  unitPrice: number;
-  supplier: string;
-  expiryDate: string;
-  status: 'in-stock' | 'low-stock' | 'out-of-stock' | 'expired';
-}
+import { useAuth } from "../contexts/AuthContext";
+import { inventoryService, Product } from "../services/inventoryService";
+import ProductFormDialog from "../components/inventory/ProductFormDialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../components/ui/alert-dialog";
 
 const InventoryManagement = () => {
   const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
-  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [inventory, setInventory] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<Product | undefined>(undefined);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
+
+  const fetchInventory = async () => {
+    setLoading(true);
+    try {
+      if (user) {
+        const products = await inventoryService.getProductsByRole(user.id, user.role);
+        setInventory(products);
+      }
+    } catch (error) {
+      console.error("Failed to fetch inventory:", error);
+      // toast for error
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    // Sample inventory data
-    const sampleInventory: InventoryItem[] = [
-      {
-        id: '1',
-        name: 'Paracetamol 500mg',
-        sku: 'MED-001',
-        category: 'Pain Relief',
-        quantity: 500,
-        minStock: 100,
-        maxStock: 1000,
-        unitPrice: 50,
-        supplier: 'PharmaCorp Ltd',
-        expiryDate: '2025-12-31',
-        status: 'in-stock'
-      },
-      {
-        id: '2',
-        name: 'Amoxicillin 250mg',
-        sku: 'MED-002',
-        category: 'Antibiotics',
-        quantity: 25,
-        minStock: 50,
-        maxStock: 500,
-        unitPrice: 120,
-        supplier: 'MediSupply Co',
-        expiryDate: '2024-08-15',
-        status: 'low-stock'
-      },
-      {
-        id: '3',
-        name: 'Insulin Injection',
-        sku: 'MED-003',
-        category: 'Diabetes',
-        quantity: 0,
-        minStock: 20,
-        maxStock: 200,
-        unitPrice: 850,
-        supplier: 'DiaCare Ltd',
-        expiryDate: '2024-10-30',
-        status: 'out-of-stock'
-      },
-      {
-        id: '4',
-        name: 'Vitamin C Tablets',
-        sku: 'MED-004',
-        category: 'Vitamins',
-        quantity: 150,
-        minStock: 50,
-        maxStock: 300,
-        unitPrice: 75,
-        supplier: 'HealthSupp Inc',
-        expiryDate: '2024-03-15',
-        status: 'expired'
-      }
-    ];
-
-    setInventory(sampleInventory);
+    fetchInventory();
   }, []);
+
+  const handleFormSubmit = async () => {
+    fetchInventory();
+  };
+
+  const openFormForNew = () => {
+    setSelectedProduct(undefined);
+    setIsFormOpen(true);
+  };
+
+  const openFormForEdit = (product: Product) => {
+    setSelectedProduct(product);
+    setIsFormOpen(true);
+  };
+
+  const openDeleteDialog = (product: Product) => {
+    setProductToDelete(product);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (productToDelete) {
+      try {
+        await inventoryService.deleteProduct(productToDelete.id);
+        fetchInventory();
+        // toast for success
+      } catch (error) {
+        console.error("Failed to delete product:", error);
+        // toast for error
+      } finally {
+        setIsDeleteDialogOpen(false);
+        setProductToDelete(null);
+      }
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -117,7 +114,7 @@ const InventoryManagement = () => {
 
   const filteredInventory = inventory.filter(item => {
     const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         item.sku.toLowerCase().includes(searchTerm.toLowerCase());
+                         (item.sku && item.sku.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
@@ -130,7 +127,7 @@ const InventoryManagement = () => {
     lowStock: inventory.filter(item => item.status === 'low-stock').length,
     outOfStock: inventory.filter(item => item.status === 'out-of-stock').length,
     expired: inventory.filter(item => item.status === 'expired').length,
-    totalValue: inventory.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0)
+    totalValue: inventory.reduce((sum, item) => sum + (item.stock * item.buy_price), 0)
   };
 
   return (
@@ -141,7 +138,7 @@ const InventoryManagement = () => {
             <h1 className="text-4xl font-bold text-gray-900 mb-2">Inventory Management</h1>
             <p className="text-gray-600 text-lg">Manage your medical inventory and stock levels</p>
           </div>
-          <Button>
+          <Button onClick={openFormForNew}>
             <Plus className="h-5 w-5 mr-2" />
             Add Item
           </Button>
@@ -232,63 +229,94 @@ const InventoryManagement = () => {
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b">
-                    <th className="text-left p-3">Item</th>
-                    <th className="text-left p-3">SKU</th>
-                    <th className="text-left p-3">Category</th>
-                    <th className="text-left p-3">Quantity</th>
-                    <th className="text-left p-3">Min/Max</th>
-                    <th className="text-left p-3">Unit Price</th>
-                    <th className="text-left p-3">Expiry</th>
-                    <th className="text-left p-3">Status</th>
-                    <th className="text-left p-3">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredInventory.map((item) => (
-                    <tr key={item.id} className="border-b hover:bg-gray-50">
-                      <td className="p-3">
-                        <div>
-                          <div className="font-medium">{item.name}</div>
-                          <div className="text-sm text-gray-600">{item.supplier}</div>
-                        </div>
-                      </td>
-                      <td className="p-3 font-mono text-sm">{item.sku}</td>
-                      <td className="p-3">{item.category}</td>
-                      <td className="p-3">
-                        <span className={`font-bold ${item.quantity <= item.minStock ? 'text-red-600' : 'text-green-600'}`}>
-                          {item.quantity}
-                        </span>
-                      </td>
-                      <td className="p-3 text-sm text-gray-600">
-                        {item.minStock} / {item.maxStock}
-                      </td>
-                      <td className="p-3">TZS {item.unitPrice.toLocaleString()}</td>
-                      <td className="p-3 text-sm">
-                        {new Date(item.expiryDate).toLocaleDateString()}
-                      </td>
-                      <td className="p-3">
-                        <Badge className={`${getStatusColor(item.status)} flex items-center gap-1 w-fit`}>
-                          {getStatusIcon(item.status)}
-                          {item.status.replace('-', ' ')}
-                        </Badge>
-                      </td>
-                      <td className="p-3">
-                        <Button variant="outline" size="sm">
-                          <Edit className="h-4 w-4 mr-1" />
-                          Edit
-                        </Button>
-                      </td>
+              {loading ? (
+                <div className="text-center p-8">Loading inventory...</div>
+              ) : (
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left p-3">Item</th>
+                      <th className="text-left p-3">SKU</th>
+                      <th className="text-left p-3">Category</th>
+                      <th className="text-left p-3">Quantity</th>
+                      <th className="text-left p-3">Min/Max</th>
+                      <th className="text-left p-3">Unit Price</th>
+                      <th className="text-left p-3">Expiry</th>
+                      <th className="text-left p-3">Status</th>
+                      <th className="text-left p-3">Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {filteredInventory.map((item) => (
+                      <tr key={item.id} className="border-b hover:bg-gray-50">
+                        <td className="p-3">
+                          <div>
+                            <div className="font-medium">{item.name}</div>
+                            <div className="text-sm text-gray-600">{item.supplier}</div>
+                          </div>
+                        </td>
+                        <td className="p-3 font-mono text-sm">{item.sku}</td>
+                        <td className="p-3">{item.category}</td>
+                        <td className="p-3">
+                          <span className={`font-bold ${item.stock <= item.minStock ? 'text-red-600' : 'text-green-600'}`}>
+                            {item.stock}
+                          </span>
+                        </td>
+                        <td className="p-3 text-sm text-gray-600">
+                          {item.minStock} / {item.maxStock}
+                        </td>
+                        <td className="p-3">TZS {item.buy_price.toLocaleString()}</td>
+                        <td className="p-3 text-sm">
+                          {new Date(item.expiryDate).toLocaleDateString()}
+                        </td>
+                        <td className="p-3">
+                          <Badge className={`${getStatusColor(item.status)} flex items-center gap-1 w-fit`}>
+                            {getStatusIcon(item.status)}
+                            {item.status.replace('-', ' ')}
+                          </Badge>
+                        </td>
+                        <td className="p-3">
+                          <div className="flex gap-2">
+                            <Button variant="outline" size="icon" onClick={() => openFormForEdit(item)}>
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button variant="destructive" size="icon" onClick={() => openDeleteDialog(item)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           </CardContent>
         </Card>
       </div>
+
+      <ProductFormDialog
+        isOpen={isFormOpen}
+        setIsOpen={setIsFormOpen}
+        product={selectedProduct}
+        onSubmitSuccess={handleFormSubmit}
+      />
+
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the product
+              "{productToDelete?.name}".
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteConfirm}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User as SupabaseUser, Session } from '@supabase/supabase-js';
-import { supabase } from '@/integrations/supabase/client';
-import { auditService } from '@/services/auditService';
+import { supabase } from '../integrations/supabase/client';
+import { auditService } from '../services/auditService';
 
 export interface User {
   id: string;
@@ -13,6 +13,8 @@ export interface User {
   address?: string;
   isApproved?: boolean;
   createdAt?: string;
+  parent_id?: string;
+  permissions?: string[];
   
   // Individual user fields
   dateOfBirth?: string;
@@ -86,6 +88,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       address: profile.address,
       isApproved: profile.is_approved,
       createdAt: profile.created_at,
+      parent_id: profile.parent_id,
+      permissions: profile.permissions,
       dateOfBirth: profile.date_of_birth,
       emergencyContact: profile.emergency_contact,
       pharmacyName: profile.pharmacy_name,
@@ -171,7 +175,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
         setIsLoading(false);
-        import("@/hooks/use-toast").then(({ toast }) => {
+        import("../hooks/use-toast").then(({ toast }) => {
           toast({
             title: "Login error",
             description: error.message,
@@ -187,7 +191,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (!profile.is_approved && profile.role !== "individual" && profile.role !== "admin") {
             await supabase.auth.signOut();
             setIsLoading(false);
-            import("@/hooks/use-toast").then(({ toast }) => {
+            import("../hooks/use-toast").then(({ toast }) => {
               toast({
                 title: "Pending Approval",
                 description: "Your account is pending approval. Please contact the administrator.",
@@ -204,7 +208,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           auditService.logLogin();
 
           // Toast on successful login
-          import("@/hooks/use-toast").then(({ toast }) => {
+          import("../hooks/use-toast").then(({ toast }) => {
             toast({
               title: "Login successful",
               description: `Welcome back, ${userData.name || userData.email}!`,
@@ -228,7 +232,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (error) {
       console.error("Login error:", error);
       setIsLoading(false);
-      import("@/hooks/use-toast").then(({ toast }) => {
+      import("../hooks/use-toast").then(({ toast }) => {
         toast({
           title: "Login error",
           description: "An error occurred during login. Please try again.",
@@ -297,7 +301,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(null);
     setSession(null);
     // Toast on logout
-    import("@/hooks/use-toast").then(({ toast }) => {
+    import("../hooks/use-toast").then(({ toast }) => {
       toast({
         title: "Logged out",
         description: "You have been logged out.",

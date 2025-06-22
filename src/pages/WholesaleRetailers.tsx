@@ -20,16 +20,17 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/lib/supabase";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 
 interface Retailer {
   id: string;
   pharmacyName: string;
-  contactPerson: string;
   email: string;
   phone: string;
   location: string;
   region: string;
-  status: 'active' | 'inactive' | 'pending';
+  isApproved: boolean;
   registrationDate: string;
   lastOrder: string;
   totalOrders: number;
@@ -47,140 +48,61 @@ const WholesaleRetailers = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedRegion, setSelectedRegion] = useState("all");
   const [activeTab, setActiveTab] = useState("active");
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newRetailer, setNewRetailer] = useState({
+    pharmacyName: '',
+    email: '',
+    phone: '',
+    location: '',
+    region: '',
+  });
+  const [adding, setAdding] = useState(false);
 
   useEffect(() => {
     if (!user || user.role !== 'wholesale') {
       navigate('/login');
       return;
     }
-
-    // Sample retailers data
-    const sampleRetailers: Retailer[] = [
-      {
-        id: '1',
-        pharmacyName: 'City Pharmacy',
-        contactPerson: 'John Mwangi',
-        email: 'john@citypharmacy.co.tz',
-        phone: '+255 712 345 678',
-        location: 'Kinondoni, Dar es Salaam',
-        region: 'Dar es Salaam',
-        status: 'active',
-        registrationDate: '2024-01-15',
-        lastOrder: '2024-06-05',
-        totalOrders: 45,
-        totalSpent: 12450000,
-        creditLimit: 5000000,
-        creditUsed: 1200000,
-        paymentTerm: '30 days'
-      },
-      {
-        id: '2',
-        pharmacyName: 'HealthCare Plus',
-        contactPerson: 'Sarah Hassan',
-        email: 'sarah@healthcareplus.co.tz',
-        phone: '+255 754 987 654',
-        location: 'Central, Arusha',
-        region: 'Arusha',
-        status: 'active',
-        registrationDate: '2024-02-20',
-        lastOrder: '2024-06-04',
-        totalOrders: 32,
-        totalSpent: 8750000,
-        creditLimit: 3000000,
-        creditUsed: 750000,
-        paymentTerm: '15 days'
-      },
-      {
-        id: '3',
-        pharmacyName: 'MediPoint',
-        contactPerson: 'David Kimani',
-        email: 'david@medipoint.co.tz',
-        phone: '+255 687 543 210',
-        location: 'Nyamagana, Mwanza',
-        region: 'Mwanza',
-        status: 'inactive',
-        registrationDate: '2024-03-10',
-        lastOrder: '2024-04-22',
-        totalOrders: 18,
-        totalSpent: 3200000,
-        creditLimit: 2000000,
-        creditUsed: 0,
-        paymentTerm: '30 days'
-      },
-      {
-        id: '4',
-        pharmacyName: 'PharmaCare',
-        contactPerson: 'Grace Mlaki',
-        email: 'grace@pharmacare.co.tz',
-        phone: '+255 765 432 109',
-        location: 'Central, Dodoma',
-        region: 'Dodoma',
-        status: 'active',
-        registrationDate: '2024-04-05',
-        lastOrder: '2024-06-06',
-        totalOrders: 28,
-        totalSpent: 6800000,
-        creditLimit: 4000000,
-        creditUsed: 1800000,
-        paymentTerm: '21 days'
-      },
-      {
-        id: '5',
-        pharmacyName: 'WellnessMed',
-        contactPerson: 'Peter Mushi',
-        email: 'peter@wellnessmed.co.tz',
-        phone: '+255 678 901 234',
-        location: 'Urban, Mbeya',
-        region: 'Mbeya',
-        status: 'pending',
-        registrationDate: '2024-06-01',
-        lastOrder: 'Never',
-        totalOrders: 0,
-        totalSpent: 0,
-        creditLimit: 1000000,
-        creditUsed: 0,
-        paymentTerm: '30 days'
-      },
-      {
-        id: '4',
-        pharmacyName: 'Mbeya Meds',
-        contactPerson: 'Asha Juma',
-        email: 'asha@mbeyameds.co.tz',
-        phone: '+255 788 123 456',
-        location: 'Forest Area, Mbeya',
-        region: 'Mbeya',
-        status: 'pending',
-        registrationDate: '2024-05-01',
-        lastOrder: 'N/A',
-        totalOrders: 0,
-        totalSpent: 0,
-        creditLimit: 0,
-        creditUsed: 0,
-        paymentTerm: 'COD'
+    async function fetchRetailers() {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, business_name, email, phone, address, region, is_approved, created_at')
+        .eq('role', 'retail');
+      if (!error && data) {
+        setRetailers(data.map((r: any) => ({
+          id: r.id,
+          pharmacyName: r.business_name,
+          email: r.email || '',
+          phone: r.phone || '',
+          location: r.address || '',
+          region: r.region || '',
+          isApproved: !!r.is_approved,
+          registrationDate: r.created_at ? r.created_at.split('T')[0] : '',
+          lastOrder: '',
+          totalOrders: 0,
+          totalSpent: 0,
+          creditLimit: 0,
+          creditUsed: 0,
+          paymentTerm: ''
+        })));
+      } else {
+        setRetailers([]);
       }
-    ];
-
-    setRetailers(sampleRetailers);
+    }
+    fetchRetailers();
   }, [user, navigate]);
 
   const filteredRetailers = retailers.filter(retailer => {
-    const matchesSearch = retailer.pharmacyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         retailer.contactPerson.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = retailer.pharmacyName.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesRegion = selectedRegion === "all" || retailer.region === selectedRegion;
-    const matchesTab = activeTab === "all" || retailer.status === activeTab;
-    
+    const matchesTab = activeTab === "all" || (activeTab === 'active' ? retailer.isApproved : !retailer.isApproved);
     return matchesSearch && matchesRegion && matchesTab;
   });
 
   const regions = ["all", ...Array.from(new Set(retailers.map(r => r.region)))];
   
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active': return 'bg-green-100 text-green-800';
-      case 'inactive': return 'bg-red-100 text-red-800';
-      case 'pending': return 'bg-yellow-100 text-yellow-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
+  const getStatusColor = (isApproved: boolean) => {
+    return isApproved ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800';
   };
 
   const handleSendMessage = (retailerId: string) => {
@@ -190,23 +112,71 @@ const WholesaleRetailers = () => {
     });
   };
 
-  const handleUpdateStatus = (retailerId: string, newStatus: string) => {
+  const handleUpdateStatus = (retailerId: string, newStatus: boolean) => {
     setRetailers(prev => prev.map(retailer => 
-      retailer.id === retailerId ? { ...retailer, status: newStatus as any } : retailer
+      retailer.id === retailerId ? { ...retailer, isApproved: newStatus } : retailer
     ));
     
     toast({
       title: "Status Updated",
-      description: `Retailer status changed to ${newStatus}`,
+      description: `Retailer status changed to ${newStatus ? 'Active' : 'Pending'}`,
     });
   };
 
   const stats = {
     totalRetailers: retailers.length,
-    activeRetailers: retailers.filter(r => r.status === 'active').length,
-    pendingApprovals: retailers.filter(r => r.status === 'pending').length,
+    activeRetailers: retailers.filter(r => r.isApproved).length,
+    pendingApprovals: retailers.filter(r => !r.isApproved).length,
     totalRevenue: retailers.reduce((sum, r) => sum + r.totalSpent, 0),
     totalCreditUsed: retailers.reduce((sum, r) => sum + r.creditUsed, 0)
+  };
+
+  const handleAddRetailer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAdding(true);
+    try {
+      const { error } = await supabase.from('profiles').insert({
+        business_name: newRetailer.pharmacyName,
+        email: newRetailer.email,
+        phone: newRetailer.phone,
+        address: newRetailer.location,
+        region: newRetailer.region,
+        role: 'retail',
+        is_approved: false,
+        created_at: new Date().toISOString(),
+      });
+      if (error) throw error;
+      toast({ title: 'Retailer Added', description: 'Retailer added successfully.' });
+      setShowAddModal(false);
+      setNewRetailer({ pharmacyName: '', email: '', phone: '', location: '', region: '' });
+      // Refresh list
+      const { data, error: fetchError } = await supabase
+        .from('profiles')
+        .select('id, business_name, email, phone, address, region, is_approved, created_at')
+        .eq('role', 'retail');
+      if (!fetchError && data) {
+        setRetailers(data.map((r: any) => ({
+          id: r.id,
+          pharmacyName: r.business_name,
+          email: r.email || '',
+          phone: r.phone || '',
+          location: r.address || '',
+          region: r.region || '',
+          isApproved: !!r.is_approved,
+          registrationDate: r.created_at ? r.created_at.split('T')[0] : '',
+          lastOrder: '',
+          totalOrders: 0,
+          totalSpent: 0,
+          creditLimit: 0,
+          creditUsed: 0,
+          paymentTerm: ''
+        })));
+      }
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message || 'Failed to add retailer', variant: 'destructive' });
+    } finally {
+      setAdding(false);
+    }
   };
 
   return (
@@ -219,7 +189,7 @@ const WholesaleRetailers = () => {
             <p className="text-gray-600 text-lg">Manage your pharmacy retailer network</p>
           </div>
           <div className="flex gap-3">
-            <Button className="bg-blue-600 hover:bg-blue-700">
+            <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => setShowAddModal(true)}>
               <Plus className="h-5 w-5 mr-2" />
               Add Retailer
             </Button>
@@ -316,95 +286,117 @@ const WholesaleRetailers = () => {
           </TabsList>
 
           <TabsContent value={activeTab} className="mt-6">
-            <div className="grid lg:grid-cols-2 gap-6">
-              {filteredRetailers.map((retailer) => (
-                <Card key={retailer.id} className="hover:shadow-md transition-shadow">
-                  <CardContent className="p-6">
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="flex items-start gap-3">
-                        <div className="p-3 bg-blue-100 rounded-lg">
-                          <Building className="h-6 w-6 text-blue-600" />
+            {retailers.length === 0 ? (
+              <div className="text-gray-500">No retailers found.</div>
+            ) : (
+              <div className="grid lg:grid-cols-2 gap-6">
+                {filteredRetailers.map((retailer) => (
+                  <Card key={retailer.id} className="hover:shadow-md transition-shadow">
+                    <CardContent className="p-6">
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="flex items-start gap-3">
+                          <div className="p-3 bg-blue-100 rounded-lg">
+                            <Building className="h-6 w-6 text-blue-600" />
+                          </div>
+                          <div>
+                            <h3 className="font-semibold text-lg">{retailer.pharmacyName}</h3>
+                            <Badge className={getStatusColor(retailer.isApproved)}>
+                              {retailer.isApproved ? 'Active' : 'Pending'}
+                            </Badge>
+                          </div>
                         </div>
-                        <div>
-                          <h3 className="font-semibold text-lg">{retailer.pharmacyName}</h3>
-                          <p className="text-gray-600">{retailer.contactPerson}</p>
-                          <Badge className={getStatusColor(retailer.status)}>
-                            {retailer.status.charAt(0).toUpperCase() + retailer.status.slice(1)}
-                          </Badge>
+                      </div>
+
+                      <div className="space-y-3 mb-4">
+                        <div className="flex items-center gap-2 text-sm">
+                          <Mail className="h-4 w-4 text-gray-400" />
+                          <span>{retailer.email}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-sm">
+                          <Phone className="h-4 w-4 text-gray-400" />
+                          <span>{retailer.phone}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-sm">
+                          <MapPin className="h-4 w-4 text-gray-400" />
+                          <span>{retailer.location}</span>
                         </div>
                       </div>
-                    </div>
 
-                    <div className="space-y-3 mb-4">
-                      <div className="flex items-center gap-2 text-sm">
-                        <Mail className="h-4 w-4 text-gray-400" />
-                        <span>{retailer.email}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm">
-                        <Phone className="h-4 w-4 text-gray-400" />
-                        <span>{retailer.phone}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm">
-                        <MapPin className="h-4 w-4 text-gray-400" />
-                        <span>{retailer.location}</span>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4 mb-4 p-3 bg-gray-50 rounded-lg">
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-blue-600">{retailer.totalOrders}</div>
-                        <div className="text-xs text-gray-500">Total Orders</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-lg font-bold text-green-600">
-                          TZS {(retailer.totalSpent / 1000000).toFixed(1)}M
+                      <div className="grid grid-cols-2 gap-4 mb-4 p-3 bg-gray-50 rounded-lg">
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-blue-600">{retailer.totalOrders}</div>
+                          <div className="text-xs text-gray-500">Total Orders</div>
                         </div>
-                        <div className="text-xs text-gray-500">Total Spent</div>
+                        <div className="text-center">
+                          <div className="text-lg font-bold text-green-600">
+                            TZS {(retailer.totalSpent / 1000000).toFixed(1)}M
+                          </div>
+                          <div className="text-xs text-gray-500">Total Spent</div>
+                        </div>
                       </div>
-                    </div>
 
-                    <div className="mb-4">
-                      <div className="flex justify-between text-sm mb-1">
-                        <span>Credit Used</span>
-                        <span>TZS {retailer.creditUsed.toLocaleString()} / {retailer.creditLimit.toLocaleString()}</span>
+                      <div className="mb-4">
+                        <div className="flex justify-between text-sm mb-1">
+                          <span>Credit Used</span>
+                          <span>TZS {retailer.creditUsed.toLocaleString()} / {retailer.creditLimit.toLocaleString()}</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div 
+                            className="bg-blue-600 h-2 rounded-full" 
+                            style={{ width: `${(retailer.creditUsed / retailer.creditLimit) * 100}%` }}
+                          ></div>
+                        </div>
                       </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div 
-                          className="bg-blue-600 h-2 rounded-full" 
-                          style={{ width: `${(retailer.creditUsed / retailer.creditLimit) * 100}%` }}
-                        ></div>
-                      </div>
-                    </div>
 
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="outline" className="flex-1">
-                        <Eye className="h-4 w-4 mr-1" />
-                        View Details
-                      </Button>
-                      <Button 
-                        size="sm" 
-                        variant="outline"
-                        onClick={() => handleSendMessage(retailer.id)}
-                      >
-                        <MessageCircle className="h-4 w-4 mr-1" />
-                        Message
-                      </Button>
-                      {retailer.status === 'pending' && (
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="outline" className="flex-1">
+                          <Eye className="h-4 w-4 mr-1" />
+                          View Details
+                        </Button>
                         <Button 
                           size="sm" 
-                          onClick={() => handleUpdateStatus(retailer.id, 'active')}
-                          className="bg-green-600 hover:bg-green-700"
+                          variant="outline"
+                          onClick={() => handleSendMessage(retailer.id)}
                         >
-                          Approve
+                          <MessageCircle className="h-4 w-4 mr-1" />
+                          Message
                         </Button>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+                        {retailer.isApproved === false && (
+                          <Button 
+                            size="sm" 
+                            onClick={() => handleUpdateStatus(retailer.id, true)}
+                            className="bg-green-600 hover:bg-green-700"
+                          >
+                            Approve
+                          </Button>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
           </TabsContent>
         </Tabs>
+
+        <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Add New Retailer</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleAddRetailer} className="space-y-4">
+              <Input placeholder="Pharmacy Name" value={newRetailer.pharmacyName} onChange={e => setNewRetailer({ ...newRetailer, pharmacyName: e.target.value })} required />
+              <Input placeholder="Email" type="email" value={newRetailer.email} onChange={e => setNewRetailer({ ...newRetailer, email: e.target.value })} required />
+              <Input placeholder="Phone" value={newRetailer.phone} onChange={e => setNewRetailer({ ...newRetailer, phone: e.target.value })} required />
+              <Input placeholder="Location/Address" value={newRetailer.location} onChange={e => setNewRetailer({ ...newRetailer, location: e.target.value })} required />
+              <Input placeholder="Region" value={newRetailer.region} onChange={e => setNewRetailer({ ...newRetailer, region: e.target.value })} required />
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setShowAddModal(false)}>Cancel</Button>
+                <Button type="submit" disabled={adding}>{adding ? 'Adding...' : 'Add Retailer'}</Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

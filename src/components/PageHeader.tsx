@@ -1,8 +1,7 @@
-
 import React from 'react';
-import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { cn } from '../lib/utils';
+import { Button } from './ui/button';
+import { Badge } from './ui/badge';
 
 interface PageHeaderProps {
   title: string;

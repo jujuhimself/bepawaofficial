@@ -1,7 +1,6 @@
-
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "../integrations/supabase/client";
+import { useAuth } from "../contexts/AuthContext";
 
 // Returns summarized stats and lists for the individual dashboard
 export function useIndividualDashboard() {
@@ -17,7 +16,7 @@ export function useIndividualDashboard() {
       const { data, error } = await supabase
         .from("orders")
         .select("*")
-        .eq("user_id", userId)
+        .eq("customer_id", userId)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return Array.isArray(data) ? data : [];
@@ -33,7 +32,7 @@ export function useIndividualDashboard() {
       const { data, error } = await supabase
         .from("prescriptions")
         .select("*")
-        .eq("user_id", userId)
+        .eq("patient_id", userId)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return Array.isArray(data) ? data : [];

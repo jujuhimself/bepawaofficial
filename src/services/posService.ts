@@ -1,5 +1,4 @@
-
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '../integrations/supabase/client';
 
 export interface PosSale {
   id: string;
@@ -8,6 +7,7 @@ export interface PosSale {
   total_amount: number;
   payment_method: string;
   customer_name?: string;
+  customer_phone?: string;
   created_at: string;
 }
 
@@ -24,23 +24,28 @@ class PosService {
   async createSale(sale: Omit<PosSale, 'id' | 'created_at'>, items: Omit<PosSaleItem, 'id' | 'pos_sale_id'>[]) {
     const { data: saleData, error: saleError } = await supabase
       .from('pos_sales')
-      .insert(sale)
-      .select()
-      .single();
+      .insert([sale])
+      .select();
 
     if (saleError) throw saleError;
+    if (!saleData || saleData.length === 0) throw new Error("Sale creation failed.");
+
+    const newSale = saleData[0];
 
     if (items.length > 0) {
       const saleItems = items.map(item => ({
         ...item,
-        pos_sale_id: saleData.id
+        pos_sale_id: newSale.id
       }));
 
       const { error: itemsError } = await supabase
         .from('pos_sale_items')
         .insert(saleItems);
 
-      if (itemsError) throw itemsError;
+      if (itemsError) {
+        await supabase.from('pos_sales').delete().eq('id', newSale.id);
+        throw itemsError;
+      }
     }
 
     return saleData;

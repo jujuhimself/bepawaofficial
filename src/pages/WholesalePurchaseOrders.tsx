@@ -1,426 +1,283 @@
-import { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import React, { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Button } from "../components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+import { Badge } from "../components/ui/badge";
+import { Input } from "../components/ui/input";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { useNavigate } from "react-router-dom";
-import { 
-  FileText, 
-  Plus, 
-  Minus,
-  Building,
-  Package,
-  Calculator,
-  Send,
-  Save,
-  Trash2
-} from "lucide-react";
-import { useAuth } from "@/contexts/AuthContext";
-import Navbar from "@/components/Navbar";
-import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { FileText, Plus, Send, Trash2 } from "lucide-react";
+import { useAuth } from "../contexts/AuthContext";
+import { useToast } from "../hooks/use-toast";
+import { supabase } from "../integrations/supabase/client";
+import LoadingState from "../components/LoadingState";
+import EmptyState from "../components/EmptyState";
 
+// Types
 interface Product {
   id: string;
   name: string;
   sku: string;
-  price: number;
-  category: string;
+  sell_price: number;
 }
-
 interface POItem {
-  id: string;
-  productId: string;
-  productName: string;
+  product_id: string;
+  product_name: string;
   sku: string;
   quantity: number;
-  unitPrice: number;
-  total: number;
+  unit_price: number;
 }
-
+interface PurchaseOrder {
+  id?: string;
+  po_number: string;
+  wholesaler_id: string;
+  retailer_id: string;
+  status: 'draft' | 'sent' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
+  items: POItem[];
+  total_amount: number;
+  created_at?: string;
+  retailer_name?: string;
+}
 interface Retailer {
   id: string;
-  name: string;
-  email: string;
-  location: string;
+  business_name: string;
 }
+
+// API Functions
+const fetchWholesalerData = async (wholesalerId: string) => {
+  const productsPromise = supabase.from('products').select('id, name, sku, sell_price').eq('wholesaler_id', wholesalerId);
+  const retailersPromise = supabase.from('profiles').select('id, business_name').eq('role', 'retail');
+  const purchaseOrdersPromise = supabase.from('purchase_orders').select('*, retailer:retailer_id(business_name)').eq('wholesaler_id', wholesalerId).order('created_at', { ascending: false });
+
+  const [productsRes, retailersRes, purchaseOrdersRes] = await Promise.all([productsPromise, retailersPromise, purchaseOrdersPromise]);
+
+  if (productsRes.error) throw new Error(productsRes.error.message);
+  if (retailersRes.error) throw new Error(retailersRes.error.message);
+  if (purchaseOrdersRes.error) throw new Error(purchaseOrdersRes.error.message);
+
+  const purchaseOrders = (purchaseOrdersRes.data || []).map((po: any) => ({
+      ...po,
+      retailer_name: po.retailer?.business_name,
+  }));
+
+  return { products: productsRes.data || [], retailers: retailersRes.data || [], purchaseOrders };
+};
+
+const savePurchaseOrder = async (po: PurchaseOrder) => {
+  const { data, error } = await supabase.from('purchase_orders').upsert(po).select().single();
+  if (error) throw new Error(error.message);
+  return data;
+};
+
 
 const WholesalePurchaseOrders = () => {
   const { user } = useAuth();
-  const navigate = useNavigate();
   const { toast } = useToast();
-  const [retailers, setRetailers] = useState<Retailer[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [selectedRetailer, setSelectedRetailer] = useState<string>("");
-  const [poItems, setPOItems] = useState<POItem[]>([]);
-  const [poNumber, setPONumber] = useState("");
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    if (!user || user.role !== 'wholesale') {
-      navigate('/login');
-      return;
+  const [activePO, setActivePO] = useState<PurchaseOrder | null>(null);
+  
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['wholesalerPurchaseData', user?.id],
+    queryFn: () => fetchWholesalerData(user!.id),
+    enabled: !!user,
+  });
+
+  const mutation = useMutation({
+    mutationFn: savePurchaseOrder,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['wholesalerPurchaseData', user?.id] });
+      toast({ title: "Success", description: "Purchase Order saved." });
+      setActivePO(null);
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: `Failed to save PO: ${error.message}`, variant: 'destructive' });
     }
+  });
 
-    setPONumber(`PO-${Date.now()}`);
-
-    // Load retailers from Supabase (all retail pharmacies in profiles)
-    async function fetchRetailers() {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, business_name, region, city, address, email')
-        .eq('role', 'retail')
-        .eq('is_approved', true);
-
-      if (!error && data) {
-        setRetailers(
-          data.map((r: any) => ({
-            id: r.id,
-            name: r.business_name,
-            email: r.email || "",
-            location: [r.city, r.region, r.address].filter(Boolean).join(", "),
-          }))
-        );
-      }
-    }
-    fetchRetailers();
-
-    // Load products from Supabase for this wholesaler
-    async function fetchProducts() {
-      const { data, error } = await supabase
-        .from('products')
-        .select('id, name, sku, sell_price, category')
-        .eq('wholesaler_id', user.id);
-
-      if (!error && data) {
-        setProducts(
-          data.map((p: any) => ({
-            id: p.id,
-            name: p.name,
-            sku: p.sku,
-            price: Number(p.sell_price ?? 0),
-            category: p.category,
-          }))
-        );
-      }
-    }
-    fetchProducts();
-  }, [user, navigate]);
-
-  const addProduct = (productId: string) => {
-    const product = products.find(p => p.id === productId);
+  const createNewPO = () => {
+    setActivePO({
+      po_number: `PO-${Date.now()}`,
+      wholesaler_id: user!.id,
+      retailer_id: '',
+      status: 'draft',
+      items: [],
+      total_amount: 0
+    });
+  };
+  
+  const handleItemChange = (productId: string) => {
+    if (!activePO) return;
+    const product = data?.products.find(p => p.id === productId);
     if (!product) return;
 
-    const existingItem = poItems.find(item => item.productId === productId);
+    const existingItem = activePO.items.find(item => item.product_id === productId);
+    let newItems;
     if (existingItem) {
-      updateQuantity(existingItem.id, existingItem.quantity + 1);
+      newItems = activePO.items.map(item => item.product_id === productId ? { ...item, quantity: item.quantity + 1 } : item);
     } else {
-      const newItem: POItem = {
-        id: Date.now().toString(),
-        productId: product.id,
-        productName: product.name,
-        sku: product.sku,
-        quantity: 1,
-        unitPrice: product.price,
-        total: product.price
-      };
-      setPOItems([...poItems, newItem]);
+      newItems = [...activePO.items, { product_id: product.id, product_name: product.name, sku: product.sku, quantity: 1, unit_price: product.sell_price }];
     }
+    const newTotal = newItems.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0);
+    setActivePO({ ...activePO, items: newItems, total_amount: newTotal });
   };
-
-  const removeItem = (itemId: string) => {
-    setPOItems(poItems.filter(item => item.id !== itemId));
-  };
-
-  const updateQuantity = (itemId: string, newQuantity: number) => {
-    if (newQuantity <= 0) {
-      removeItem(itemId);
-      return;
+  
+  const updateItemQuantity = (productId: string, newQuantity: number) => {
+    if (!activePO) return;
+    let newItems;
+    if(newQuantity <= 0) {
+        newItems = activePO.items.filter(item => item.product_id !== productId);
+    } else {
+        newItems = activePO.items.map(item => item.product_id === productId ? { ...item, quantity: newQuantity } : item);
     }
-
-    setPOItems(poItems.map(item => 
-      item.id === itemId 
-        ? { ...item, quantity: newQuantity, total: newQuantity * item.unitPrice }
-        : item
-    ));
+    const newTotal = newItems.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0);
+    setActivePO({ ...activePO, items: newItems, total_amount: newTotal });
+  };
+  
+  const handleSavePO = (status: 'draft' | 'sent' = 'draft') => {
+      if (!activePO || !activePO.retailer_id || activePO.items.length === 0) {
+          toast({ title: "Error", description: "Please select a retailer and add items.", variant: "destructive"});
+          return;
+      }
+      mutation.mutate({ ...activePO, status });
   };
 
-  const calculateSubtotal = () => {
-    return poItems.reduce((sum, item) => sum + item.total, 0);
-  };
+  if (isLoading) return <LoadingState text="Loading Purchase Orders..." />;
+  if (isError) return <EmptyState title="Error" description="Could not load data." icon={<FileText />} />;
 
-  const calculateTax = () => {
-    return calculateSubtotal() * 0.18; // 18% VAT
-  };
-
-  const calculateTotal = () => {
-    return calculateSubtotal() + calculateTax();
-  };
-
-  const savePO = () => {
-    if (!selectedRetailer || poItems.length === 0) {
-      toast({
-        title: "Invalid Purchase Order",
-        description: "Please select a retailer and add at least one item.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    toast({
-      title: "Purchase Order Saved",
-      description: `PO ${poNumber} has been saved as draft.`,
-    });
-  };
-
-  const sendPO = () => {
-    if (!selectedRetailer || poItems.length === 0) {
-      toast({
-        title: "Invalid Purchase Order",
-        description: "Please select a retailer and add at least one item.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    toast({
-      title: "Purchase Order Sent",
-      description: `PO ${poNumber} has been sent to the selected retailer.`,
-    });
-
-    setSelectedRetailer("");
-    setPOItems([]);
-    setPONumber(`PO-${Date.now()}`);
-  };
-
-  const selectedRetailerInfo = retailers.find(r => r.id === selectedRetailer);
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50">
-      <Navbar />
-      
-      <div className="container mx-auto px-4 py-8">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">Purchase Orders</h1>
-          <p className="text-gray-600 text-lg">Create and manage purchase orders for retailers</p>
+  // PO Builder View
+  if (activePO) {
+    return (
+      <div className="container mx-auto p-4 space-y-4">
+        <div className="flex justify-between items-center">
+          <h1 className="text-2xl font-bold">PO: {activePO.po_number}</h1>
+          <Button variant="outline" onClick={() => setActivePO(null)}>Back to List</Button>
         </div>
-
-        <div className="grid lg:grid-cols-3 gap-6">
-          {/* PO Builder */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* PO Header */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <FileText className="h-5 w-5" />
-                  Purchase Order: {poNumber}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Select Retailer</label>
-                    <Select value={selectedRetailer} onValueChange={setSelectedRetailer}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Choose a retailer..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {retailers.map((retailer) => (
-                          <SelectItem key={retailer.id} value={retailer.id}>
-                            <div className="flex items-center gap-2">
-                              <Building className="h-4 w-4" />
-                              {retailer.name} - {retailer.location}
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {selectedRetailerInfo && (
-                    <div className="p-3 bg-gray-50 rounded-lg">
-                      <h4 className="font-medium">{selectedRetailerInfo.name}</h4>
-                      <p className="text-sm text-gray-600">{selectedRetailerInfo.email}</p>
-                      <p className="text-sm text-gray-600">{selectedRetailerInfo.location}</p>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Add Products */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Package className="h-5 w-5" />
-                  Add Products
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {products.map((product) => (
-                    <div key={product.id} className="border rounded-lg p-3 hover:bg-gray-50">
-                      <h4 className="font-medium text-sm mb-1">{product.name}</h4>
-                      <p className="text-xs text-gray-500 mb-2">{product.sku}</p>
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm font-bold text-green-600">TZS {product.price}</span>
-                        <Button 
-                          size="sm" 
-                          onClick={() => addProduct(product.id)}
-                          className="h-7 px-2"
-                        >
-                          <Plus className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* PO Items */}
-            {poItems.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Order Items</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Product</TableHead>
-                        <TableHead>SKU</TableHead>
-                        <TableHead>Quantity</TableHead>
-                        <TableHead>Unit Price</TableHead>
-                        <TableHead>Total</TableHead>
-                        <TableHead>Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {poItems.map((item) => (
-                        <TableRow key={item.id}>
-                          <TableCell className="font-medium">{item.productName}</TableCell>
-                          <TableCell>{item.sku}</TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Button 
-                                size="sm" 
-                                variant="outline"
-                                onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                                className="h-8 w-8 p-0"
-                              >
-                                <Minus className="h-3 w-3" />
-                              </Button>
-                              <span className="w-12 text-center">{item.quantity}</span>
-                              <Button 
-                                size="sm" 
-                                variant="outline"
-                                onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                                className="h-8 w-8 p-0"
-                              >
-                                <Plus className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                          <TableCell>TZS {item.unitPrice}</TableCell>
-                          <TableCell className="font-medium">TZS {item.total.toLocaleString()}</TableCell>
-                          <TableCell>
-                            <Button 
-                              size="sm" 
-                              variant="outline"
-                              onClick={() => removeItem(item.id)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-
-          {/* PO Summary */}
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Calculator className="h-5 w-5" />
-                  Order Summary
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <span>Items:</span>
-                    <span>{poItems.length}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Subtotal:</span>
-                    <span>TZS {calculateSubtotal().toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>VAT (18%):</span>
-                    <span>TZS {calculateTax().toLocaleString()}</span>
-                  </div>
-                  <div className="border-t pt-3">
-                    <div className="flex justify-between font-bold text-lg">
-                      <span>Total:</span>
-                      <span className="text-green-600">TZS {calculateTotal().toLocaleString()}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-3 mt-6">
-                  <Button 
-                    onClick={savePO}
-                    variant="outline" 
-                    className="w-full"
-                    disabled={!selectedRetailer || poItems.length === 0}
-                  >
-                    <Save className="h-4 w-4 mr-2" />
-                    Save as Draft
-                  </Button>
-                  <Button 
-                    onClick={sendPO}
-                    className="w-full bg-blue-600 hover:bg-blue-700"
-                    disabled={!selectedRetailer || poItems.length === 0}
-                  >
-                    <Send className="h-4 w-4 mr-2" />
-                    Send Purchase Order
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Quick Stats */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Today's Activity</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <span className="text-sm">POs Created:</span>
-                    <Badge variant="outline">3</Badge>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm">POs Sent:</span>
-                    <Badge variant="outline">2</Badge>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm">Total Value:</span>
-                    <span className="text-sm font-medium">TZS 1.2M</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+        <Card>
+          <CardHeader>
+              <CardTitle>Details</CardTitle>
+          </CardHeader>
+          <CardContent className="grid md:grid-cols-2 gap-4">
+            <div>
+              <label>Retailer</label>
+              <Select 
+                value={activePO.retailer_id} 
+                onValueChange={(value) => setActivePO({ ...activePO, retailer_id: value })}
+              >
+                <SelectTrigger><SelectValue placeholder="Select a retailer" /></SelectTrigger>
+                <SelectContent>
+                  {data?.retailers.map(r => <SelectItem key={r.id} value={r.id}>{r.business_name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label>Status</label>
+              <Badge>{activePO.status}</Badge>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Items</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="mb-4">
+                <Select onValueChange={handleItemChange}>
+                    <SelectTrigger><SelectValue placeholder="Add a product..." /></SelectTrigger>
+                    <SelectContent>
+                        {data?.products.map(p => <SelectItem key={p.id} value={p.id}>{p.name} ({p.sku})</SelectItem>)}
+                    </SelectContent>
+                </Select>
+            </div>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Product</TableHead>
+                  <TableHead>Quantity</TableHead>
+                  <TableHead>Unit Price</TableHead>
+                  <TableHead>Total</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {activePO.items.map(item => (
+                  <TableRow key={item.product_id}>
+                    <TableCell>{item.product_name}</TableCell>
+                    <TableCell>
+                      <Input 
+                        type="number" 
+                        value={item.quantity} 
+                        onChange={(e) => updateItemQuantity(item.product_id, parseInt(e.target.value))}
+                        className="w-20"
+                      />
+                    </TableCell>
+                    <TableCell>${item.unit_price.toFixed(2)}</TableCell>
+                    <TableCell>${(item.quantity * item.unit_price).toFixed(2)}</TableCell>
+                    <TableCell>
+                      <Button variant="ghost" size="icon" onClick={() => updateItemQuantity(item.product_id, 0)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            <div className="text-right font-bold mt-4">
+              Total: ${activePO.total_amount.toFixed(2)}
+            </div>
+          </CardContent>
+        </Card>
+        <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => handleSavePO('draft')} disabled={mutation.isPending}>
+                {mutation.isPending ? 'Saving...' : 'Save as Draft'}
+            </Button>
+            <Button onClick={() => handleSavePO('sent')} disabled={mutation.isPending}>
+                <Send className="mr-2 h-4 w-4"/>
+                {mutation.isPending ? 'Sending...' : 'Send to Retailer'}
+            </Button>
         </div>
       </div>
+    );
+  }
+
+  // List View
+  return (
+    <div className="container mx-auto p-4">
+        <div className="flex justify-between items-center mb-4">
+            <h1 className="text-2xl font-bold">Purchase Orders</h1>
+            <Button onClick={createNewPO}>
+                <Plus className="mr-2 h-4 w-4" />
+                New Purchase Order
+            </Button>
+        </div>
+        <Card>
+            <CardContent>
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>PO Number</TableHead>
+                            <TableHead>Retailer</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead>Total</TableHead>
+                            <TableHead>Date</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {data?.purchaseOrders.length === 0 && <TableRow><TableCell colSpan={5} className="text-center">No purchase orders found.</TableCell></TableRow>}
+                      {data?.purchaseOrders.map((po: any) => (
+                          <TableRow key={po.id} onClick={() => setActivePO(po as PurchaseOrder)} className="cursor-pointer">
+                              <TableCell>{po.po_number}</TableCell>
+                              <TableCell>{po.retailer_name || 'N/A'}</TableCell>
+                              <TableCell><Badge>{po.status}</Badge></TableCell>
+                              <TableCell>${po.total_amount.toFixed(2)}</TableCell>
+                              <TableCell>{new Date(po.created_at).toLocaleDateString()}</TableCell>
+                          </TableRow>
+                      ))}
+                    </TableBody>
+                </Table>
+            </CardContent>
+        </Card>
     </div>
   );
 };

@@ -1,7 +1,6 @@
-
 import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Search, Building, TestTube, Upload, Clock } from "lucide-react";
+import { Search, Building, TestTube, Upload, Clock, ShoppingCart } from "lucide-react";
 import { Link } from "react-router-dom";
 
 const IndividualQuickActions = () => (
@@ -10,11 +9,17 @@ const IndividualQuickActions = () => (
       <CardTitle className="text-2xl">Quick Actions</CardTitle>
     </CardHeader>
     <CardContent>
-      <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-6 gap-4">
         <Button asChild className="h-24 flex-col bg-blue-600 hover:bg-blue-700 text-white">
           <Link to="/browse-products">
             <Search className="h-8 w-8 mb-2" />
             Browse Medicines
+          </Link>
+        </Button>
+        <Button asChild variant="outline" className="h-24 flex-col border-2 hover:bg-gray-50">
+          <Link to="/individual/cart">
+            <ShoppingCart className="h-8 w-8 mb-2" />
+            My Cart
           </Link>
         </Button>
         <Button asChild variant="outline" className="h-24 flex-col border-2 hover:bg-gray-50">

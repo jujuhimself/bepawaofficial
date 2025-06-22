@@ -8,6 +8,9 @@ import { TestTube, Calendar, User, Search, Plus } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { labService } from "@/services/labService";
 
 interface LabOrderItem {
   id: string;
@@ -27,6 +30,10 @@ const LabResults = () => {
   const [results, setResults] = useState<LabOrderItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [resultDialogOpen, setResultDialogOpen] = useState(false);
+  const [selectedResult, setSelectedResult] = useState<LabOrderItem | null>(null);
+  const [resultText, setResultText] = useState("");
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -85,6 +92,29 @@ const LabResults = () => {
     result.test_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     result.patient_name.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const handleOpenResultDialog = (result: LabOrderItem) => {
+    setSelectedResult(result);
+    setResultText(result.result || "");
+    setResultDialogOpen(true);
+  };
+
+  const handleResultChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => setResultText(e.target.value);
+
+  const handleUploadResult = async () => {
+    if (!selectedResult || !resultText) return;
+    setUploading(true);
+    try {
+      await labService.updateLabOrderItemResult(selectedResult.id, resultText);
+      toast({ title: "Result Uploaded", description: "Test result updated successfully." });
+      setResultDialogOpen(false);
+      fetchResults();
+    } catch (e) {
+      toast({ title: "Error", description: "Failed to upload result", variant: "destructive" });
+    } finally {
+      setUploading(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -176,7 +206,7 @@ const LabResults = () => {
                       View Details
                     </Button>
                     {result.status !== 'completed' && (
-                      <Button variant="outline" size="sm">
+                      <Button variant="outline" size="sm" onClick={() => handleOpenResultDialog(result)}>
                         Update Result
                       </Button>
                     )}
@@ -186,6 +216,25 @@ const LabResults = () => {
             ))}
           </div>
         )}
+
+        <Dialog open={resultDialogOpen} onOpenChange={setResultDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Upload Test Result</DialogTitle>
+            </DialogHeader>
+            <div className="mb-4">
+              <Textarea value={resultText} onChange={handleResultChange} placeholder="Enter result details..." rows={6} />
+            </div>
+            <DialogFooter>
+              <Button onClick={handleUploadResult} disabled={uploading || !resultText}>
+                {uploading ? "Uploading..." : "Upload Result"}
+              </Button>
+              <Button variant="outline" onClick={() => setResultDialogOpen(false)}>
+                Cancel
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

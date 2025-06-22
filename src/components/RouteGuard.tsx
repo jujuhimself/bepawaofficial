@@ -1,11 +1,10 @@
-
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '../contexts/AuthContext';
 import { Loader2, AlertTriangle, Clock } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { logError } from '@/utils/logger';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { Button } from './ui/button';
+import { logError } from '../utils/logger';
 
 interface RouteGuardProps {
   children: React.ReactNode;
@@ -37,7 +36,8 @@ const RouteGuard: React.FC<RouteGuardProps> = ({
         }
 
         if (requireApproval && !user.isApproved && user.role !== 'individual' && user.role !== 'admin') {
-          // Stay on current page but show approval message
+          // The downstream component is now responsible for handling the pending approval state.
+          // This allows the main layout to render, preventing a jarring full-page lock.
           return;
         }
 
@@ -94,7 +94,10 @@ const RouteGuard: React.FC<RouteGuardProps> = ({
     return null;
   }
 
-  // Show approval pending message for non-individual/non-admin users
+  // The approval pending message is now handled by the specific dashboard components
+  // (e.g., WholesaleDashboard) so we can remove the generic full-page lock here.
+  // This provides a better user experience as they can see the app shell.
+  /*
   if (requireApproval && !user.isApproved && user.role !== 'individual' && user.role !== 'admin') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -117,6 +120,7 @@ const RouteGuard: React.FC<RouteGuardProps> = ({
       </div>
     );
   }
+  */
 
   return <>{children}</>;
 };

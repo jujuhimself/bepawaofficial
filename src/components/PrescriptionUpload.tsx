@@ -1,95 +1,131 @@
+import { useState } from 'react';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { useToast } from '../hooks/use-toast';
+import { supabase } from '../integrations/supabase/client';
 
-import { useEffect, useState } from "react";
-import PrescriptionUploadForm from "./PrescriptionUploadForm";
-import PrescriptionHistoryList from "./PrescriptionHistoryList";
-import { getFileUrl, deleteFile } from "@/services/storageService";
-import { auditService } from "@/services/auditService";
-import { useAuth } from "@/contexts/AuthContext";
+export function PrescriptionUpload() {
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const { toast } = useToast();
 
-interface PrescriptionFile {
-  id: string;
-  fileName: string;
-  uploadDate: string;
-  doctorName: string;
-  notes: string;
-  filePath: string;
-  viewUrl: string;
-  status: 'pending' | 'processed' | 'filled';
-  pharmacyName?: string;
-}
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (!selectedFile) return;
 
-const PrescriptionUpload = () => {
-  const { user } = useAuth();
-  const [prescriptions, setPrescriptions] = useState<PrescriptionFile[]>([]);
-  const [isUploading, setIsUploading] = useState(false);
+    // Validate file type
+    if (!selectedFile.type.startsWith('image/')) {
+      toast({
+        title: 'Invalid file type',
+        description: 'Please upload an image file (JPG, PNG, etc.)',
+        variant: 'destructive',
+      });
+      return;
+    }
 
-  // Load prescription file refs from storage
-  useEffect(() => {
-    if (!user?.id) return;
-    (async () => {
-      try {
-        const { data, error } = await (window as any).supabase.storage
-          .from("prescriptions")
-          .list(`${user.id}/`);
-        if (error || !data) {
-          setPrescriptions([]);
-          return;
-        }
-        const history: PrescriptionFile[] = await Promise.all(
-          data.map(async (file: any) => {
-            const url = await getFileUrl("prescriptions", `${user.id}/${file.name}`);
-            return {
-              id: file.id || file.name,
-              fileName: file.name.split("_").slice(1).join("_"),
-              uploadDate: new Date(file.created_at || Date.now()).toISOString(),
-              doctorName: "",
-              notes: "",
-              filePath: `${user.id}/${file.name}`,
-              viewUrl: url || "",
-              status: "pending",
-              pharmacyName: "",
-            };
-          })
-        );
-        setPrescriptions(history.reverse());
-      } catch (err) {
-        setPrescriptions([]);
-      }
-    })();
-  }, [user?.id, isUploading]);
+    // Validate file size (max 5MB)
+    if (selectedFile.size > 5 * 1024 * 1024) {
+      toast({
+        title: 'File too large',
+        description: 'Please upload an image smaller than 5MB',
+        variant: 'destructive',
+      });
+      return;
+    }
 
-  const handleDelete = async (filePath: string) => {
-    if (!user?.id) return;
+    setFile(selectedFile);
+
+    // Create preview
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setPreview(reader.result as string);
+    };
+    reader.readAsDataURL(selectedFile);
+  };
+
+  const handleUpload = async () => {
+    if (!file) return;
+
     try {
-      await deleteFile("prescriptions", filePath);
-      await auditService.logAction(
-        "delete-prescription",
-        "prescription",
-        undefined,
-        { filePath }
-      );
-      setPrescriptions((prev) =>
-        prev.filter((p) => p.filePath !== filePath)
-      );
-    } catch (err) {
-      alert("Delete failed.");
+      setUploading(true);
+
+      // Upload to Supabase Storage
+      const { data, error: uploadError } = await supabase.storage
+        .from('prescriptions')
+        .upload(`${Date.now()}-${file.name}`, file);
+
+      if (uploadError) throw uploadError;
+
+      // Create prescription record
+      const { error: dbError } = await supabase
+        .from('prescriptions')
+        .insert({
+          file_path: data?.path,
+          status: 'pending',
+          uploaded_at: new Date().toISOString(),
+        });
+
+      if (dbError) throw dbError;
+
+      toast({
+        title: 'Success',
+        description: 'Prescription uploaded successfully',
+      });
+
+      // Reset form
+      setFile(null);
+      setPreview(null);
+    } catch (error) {
+      console.error('Error uploading prescription:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to upload prescription. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setUploading(false);
     }
   };
 
-  // Rerender after upload
-  const handleUploadSuccess = () => {
-    setIsUploading(isUploading => !isUploading);
-  };
-
   return (
-    <div className="space-y-6">
-      <PrescriptionUploadForm onUploadSuccess={handleUploadSuccess} />
-      <PrescriptionHistoryList
-        prescriptions={prescriptions}
-        onDelete={handleDelete}
-      />
-    </div>
-  );
-};
+    <Card>
+      <CardHeader>
+        <CardTitle>Upload Prescription</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid w-full max-w-sm items-center gap-1.5">
+          <Input
+            type="file"
+            accept="image/*"
+            onChange={handleFileChange}
+            disabled={uploading}
+          />
+          <p className="text-sm text-gray-500">
+            Supported formats: JPG, PNG. Max size: 5MB
+          </p>
+        </div>
 
-export default PrescriptionUpload;
+        {preview && (
+          <div className="mt-4">
+            <p className="mb-2 text-sm font-medium">Preview:</p>
+            <img
+              src={preview}
+              alt="Prescription preview"
+              className="max-w-sm rounded-lg border"
+            />
+          </div>
+        )}
+
+        <Button
+          onClick={handleUpload}
+          disabled={!file || uploading}
+          className="w-full"
+        >
+          {uploading ? 'Uploading...' : 'Upload Prescription'}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}

@@ -44,6 +44,8 @@ const ProductEditDialog = ({ product, open, onOpenChange }: ProductEditDialogPro
     batch_number: ""
   });
   const { user } = useAuth();
+  const [reason, setReason] = useState("");
+  const [customReason, setCustomReason] = useState("");
 
   useEffect(() => {
     if (product) {
@@ -66,13 +68,17 @@ const ProductEditDialog = ({ product, open, onOpenChange }: ProductEditDialogPro
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+    if (!reason && !customReason) {
+      alert("Please provide a reason for the update.");
+      return;
+    }
     try {
       await updateProduct.mutateAsync({
         id: product.id,
-        updates: formData
+        updates: formData,
+        oldProduct: product,
+        reason: reason === 'other' ? customReason : reason
       });
-      
       onOpenChange(false);
     } catch (error) {
       console.error('Error updating product:', error);
@@ -228,6 +234,33 @@ const ProductEditDialog = ({ product, open, onOpenChange }: ProductEditDialogPro
                 value={formData.expiry_date}
                 onChange={(e) => handleChange('expiry_date', e.target.value)}
               />
+            </div>
+
+            <div>
+              <Label htmlFor="reason">Reason for Update *</Label>
+              <select
+                id="reason"
+                value={reason}
+                onChange={e => setReason(e.target.value)}
+                required
+                className="border rounded px-2 py-1 w-full"
+              >
+                <option value="">Select reason</option>
+                <option value="theft">Theft</option>
+                <option value="damage">Damage</option>
+                <option value="expiration">Expiration</option>
+                <option value="correction">Correction</option>
+                <option value="other">Other</option>
+              </select>
+              {reason === 'other' && (
+                <Input
+                  className="mt-2"
+                  placeholder="Enter custom reason"
+                  value={customReason}
+                  onChange={e => setCustomReason(e.target.value)}
+                  required
+                />
+              )}
             </div>
           </div>
 

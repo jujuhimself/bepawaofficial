@@ -1,4 +1,3 @@
-
 import { supabase } from '@/integrations/supabase/client';
 
 export interface AuditLogEntry {
@@ -89,7 +88,7 @@ class AuditService {
     });
   }
 
-  async logProductUpdate(productId: string, oldData: any, newData: any) {
+  async logProductUpdate(productId: string, oldData: any, newData: any, reason?: string) {
     await this.createAuditLog({
       action: 'UPDATE',
       resource_type: 'product',
@@ -97,7 +96,7 @@ class AuditService {
       old_values: oldData,
       new_values: newData,
       category: 'inventory',
-      details: { message: `Product ${newData.name} updated` }
+      details: { message: `Product ${newData.name} updated`, reason },
     });
   }
 

@@ -135,20 +135,16 @@ const PharmacyDashboard = () => {
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50">
-        
         <div className="container mx-auto px-4 py-8">
           <BreadcrumbNavigation />
-          
           <div className="mb-8">
             <h1 className="text-4xl font-bold text-gray-900 mb-2">
               Welcome back, {user?.pharmacyName}
             </h1>
             <p className="text-gray-600 text-lg">Manage your orders and browse our medical product catalog</p>
           </div>
-
           <PharmacyStatsCards stats={stats} />
           <QuickReorder />
-
           {/* Analytics Dashboard */}
           <Card className="mb-8 shadow-lg border-0">
             <CardHeader>
@@ -158,7 +154,6 @@ const PharmacyDashboard = () => {
               <AnalyticsDashboard />
             </CardContent>
           </Card>
-
           <PharmacyQuickActions cartItems={stats.cartItems} />
           <PharmacyAdditionalServices />
           <PharmacyRecentOrders recentOrders={recentOrders} />

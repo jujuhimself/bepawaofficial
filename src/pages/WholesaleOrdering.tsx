@@ -1,32 +1,31 @@
-import { useState, useEffect } from "react";
-import { useAuth } from "@/contexts/AuthContext";
+import React, { useState, useEffect } from "react";
+import { useAuth } from "../contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { supabase } from "../integrations/supabase/client";
+import { useToast } from "../hooks/use-toast";
+import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
+import { Badge } from "../components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "../components/ui/dialog";
 import { Package, Plus, ShoppingCart, Search, Filter, Truck, Calendar, DollarSign, Loader2 } from "lucide-react";
 
 // Types
-interface Product {
-  id: number;
+interface WholesalerProduct {
+  id: string;
   name: string;
   category: string;
-  supplier: string;
-  unitPrice: number;
-  minQuantity: number;
-  stock: number;
   description: string;
-  leadTime: string;
+  sell_price: number;
+  stock: number;
+  wholesaler_id: string;
+  wholesaler_name: string;
 }
 
-interface CartItem extends Product {
+interface CartItem extends WholesalerProduct {
   quantity: number;
 }
 
@@ -53,69 +52,51 @@ const WholesaleOrdering = () => {
   useEffect(() => {
     if (!user) {
       navigate('/login');
-    } else if (user.role !== 'wholesale') {
-      toast({ title: "Access Denied", description: "You must be a wholesaler to access this page.", variant: "destructive" });
-      navigate('/');
     }
-  }, [user, navigate, toast]);
+    // No role check here anymore, allowing retailers
+  }, [user, navigate]);
 
-  const [wholesaleProducts] = useState([
-    {
-      id: 1,
-      name: "Paracetamol 500mg (Box of 100)",
-      category: "Pain Relief",
-      supplier: "PharmaCorp Ltd",
-      unitPrice: 35000,
-      minQuantity: 10,
-      stock: 500,
-      description: "Bulk pack paracetamol tablets",
-      leadTime: "3-5 days"
+  // Fetch products from all approved wholesalers
+  const { data: wholesaleProducts = [], isLoading: isLoadingProducts } = useQuery<WholesalerProduct[]>({
+    queryKey: ['wholesalerProducts'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('products')
+        .select(`
+          id,
+          name,
+          category,
+          description,
+          sell_price,
+          stock,
+          user_id,
+          profiles!inner (
+            business_name,
+            is_approved,
+            role
+          )
+        `)
+        .eq('profiles.role', 'wholesale')
+        .eq('profiles.is_approved', true)
+        .gt('stock', 0);
+
+      if (error) {
+        console.error("Error fetching wholesaler products:", error);
+        throw new Error(error.message);
+      }
+
+      return data.map((p: any) => ({
+        id: p.id,
+        name: p.name,
+        category: p.category,
+        description: p.description,
+        sell_price: p.sell_price,
+        stock: p.stock,
+        wholesaler_id: p.user_id,
+        wholesaler_name: p.profiles.business_name || 'Unknown Wholesaler',
+      }));
     },
-    {
-      id: 2,
-      name: "Amoxicillin 250mg (Box of 50)",
-      category: "Antibiotics",
-      supplier: "MediSupply Co",
-      unitPrice: 120000,
-      minQuantity: 5,
-      stock: 200,
-      description: "Antibiotic capsules in bulk",
-      leadTime: "2-4 days"
-    },
-    {
-      id: 3,
-      name: "Vitamin C 1000mg (Bottle of 100)",
-      category: "Vitamins",
-      supplier: "HealthPlus Distributors",
-      unitPrice: 55000,
-      minQuantity: 20,
-      stock: 300,
-      description: "High potency vitamin C supplements",
-      leadTime: "1-3 days"
-    },
-    {
-      id: 4,
-      name: "Insulin Pen (Pack of 5)",
-      category: "Diabetes",
-      supplier: "DiabetCare Inc",
-      unitPrice: 350000,
-      minQuantity: 2,
-      stock: 50,
-      description: "Pre-filled insulin pens",
-      leadTime: "5-7 days"
-    },
-    {
-      id: 5,
-      name: "Blood Pressure Monitor (Professional)",
-      category: "Medical Devices",
-      supplier: "MedTech Solutions",
-      unitPrice: 250000,
-      minQuantity: 1,
-      stock: 25,
-      description: "Digital BP monitor for pharmacies",
-      leadTime: "7-10 days"
-    }
-  ]);
+  });
 
   const { data: purchaseOrders = [], isLoading: isLoadingPOs } = useQuery<PurchaseOrder[]>({
     queryKey: ['purchaseOrders', user?.id],
@@ -159,7 +140,7 @@ const WholesaleOrdering = () => {
       if (!user) throw new Error("User not authenticated.");
 
       const ordersBySupplier = cartItems.reduce((acc, item) => {
-        const supplierName = item.supplier;
+        const supplierName = item.wholesaler_name;
         if (!acc[supplierName]) {
           acc[supplierName] = [];
         }
@@ -193,7 +174,7 @@ const WholesaleOrdering = () => {
         }
 
         // 2. Create Purchase Order
-        const total_amount = items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+        const total_amount = items.reduce((sum, item) => sum + item.sell_price * item.quantity, 0);
         const { data: po, error: poError } = await supabase
           .from('purchase_orders')
           .insert({
@@ -213,8 +194,8 @@ const WholesaleOrdering = () => {
           purchase_order_id: po.id,
           product_name: item.name,
           quantity: item.quantity,
-          unit_cost: item.unitPrice,
-          total_cost: item.unitPrice * item.quantity,
+          unit_cost: item.sell_price,
+          total_cost: item.sell_price * item.quantity,
         }));
 
         const { error: poItemsError } = await supabase
@@ -234,16 +215,16 @@ const WholesaleOrdering = () => {
     }
   });
 
-  const categories = ["all", "Pain Relief", "Antibiotics", "Vitamins", "Diabetes", "Medical Devices"];
+  const categories = ["all", ...new Set((wholesaleProducts || []).map(p => p.category))];
 
-  const filteredProducts = wholesaleProducts.filter(product => {
+  const filteredProducts = (wholesaleProducts || []).filter(product => {
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         product.supplier.toLowerCase().includes(searchTerm.toLowerCase());
+                         product.wholesaler_name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = categoryFilter === "all" || product.category === categoryFilter;
     return matchesSearch && matchesCategory;
   });
 
-  const addToCart = (product: Product, quantity: number) => {
+  const addToCart = (product: WholesalerProduct, quantity: number) => {
     const existingItem = cart.find(item => item.id === product.id);
     if (existingItem) {
       setCart(cart.map(item => 
@@ -256,11 +237,11 @@ const WholesaleOrdering = () => {
     }
   };
 
-  const removeFromCart = (productId: number) => {
+  const removeFromCart = (productId: string) => {
     setCart(cart.filter(item => item.id !== productId));
   };
 
-  const cartTotal = cart.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
+  const cartTotal = cart.reduce((sum, item) => sum + (item.sell_price * item.quantity), 0);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -278,6 +259,10 @@ const WholesaleOrdering = () => {
         <Loader2 className="h-8 w-8 animate-spin" />
       </div>
     );
+  }
+
+  if (isLoadingProducts) {
+    return <div className="p-8 text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto" /></div>;
   }
 
   return (
@@ -374,7 +359,7 @@ const WholesaleOrdering = () => {
                     <CardTitle className="text-lg">{product.name}</CardTitle>
                     <div className="flex justify-between items-center">
                       <Badge variant="outline">{product.category}</Badge>
-                      <Badge variant="secondary">{product.leadTime}</Badge>
+                      <Badge variant="secondary">{product.wholesaler_name}</Badge>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -382,15 +367,11 @@ const WholesaleOrdering = () => {
                     <div className="space-y-2">
                       <div className="flex justify-between">
                         <span className="text-sm text-gray-600">Supplier:</span>
-                        <span className="text-sm font-medium">{product.supplier}</span>
+                        <span className="text-sm font-medium">{product.wholesaler_name}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-sm text-gray-600">Unit Price:</span>
-                        <span className="text-lg font-bold">TZS {product.unitPrice.toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-sm text-gray-600">Min Quantity:</span>
-                        <span className="text-sm font-medium">{product.minQuantity}</span>
+                        <span className="text-lg font-bold">TZS {product.sell_price.toLocaleString()}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-sm text-gray-600">In Stock (Supplier):</span>
@@ -401,20 +382,20 @@ const WholesaleOrdering = () => {
                     <div className="flex items-center space-x-2">
                       <Input
                         type="number"
-                        min={product.minQuantity}
-                        defaultValue={product.minQuantity}
-                        className="w-20"
+                        min="1"
+                        defaultValue="1"
+                        className="w-24"
                         id={`quantity-${product.id}`}
                       />
                       <Button 
                         onClick={() => {
                           const quantityInput = document.getElementById(`quantity-${product.id}`) as HTMLInputElement;
-                          const quantity = parseInt(quantityInput.value) || product.minQuantity;
-                          addToCart(product, quantity);
+                          const quantity = parseInt(quantityInput.value, 10);
+                          if (quantity > 0) {
+                            addToCart(product, quantity);
+                          }
                         }}
-                        className="flex-1"
                       >
-                        <Plus className="h-4 w-4 mr-2" />
                         Add to Cart
                       </Button>
                     </div>
@@ -458,11 +439,11 @@ const WholesaleOrdering = () => {
                           </div>
                           <div className="flex justify-between">
                             <span>Unit Price:</span>
-                            <span>TZS {item.unitPrice.toLocaleString()}</span>
+                            <span>TZS {item.sell_price.toLocaleString()}</span>
                           </div>
                           <div className="flex justify-between font-medium">
                             <span>Subtotal:</span>
-                            <span>TZS {(item.unitPrice * item.quantity).toLocaleString()}</span>
+                            <span>TZS {(item.sell_price * item.quantity).toLocaleString()}</span>
                           </div>
                         </div>
                       </div>

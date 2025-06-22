@@ -1,7 +1,7 @@
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "../contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
-import PrescriptionUpload from "@/components/PrescriptionUpload";
-import PageHeader from "@/components/PageHeader";
+import { PrescriptionUpload } from "../components/PrescriptionUpload";
+import PageHeader from "../components/PageHeader";
 
 const Prescriptions = () => {
   const { user } = useAuth();

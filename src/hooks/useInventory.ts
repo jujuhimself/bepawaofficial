@@ -1,4 +1,3 @@
-
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { inventoryService, Product, InventoryMovement, Supplier, PurchaseOrder, PurchaseOrderItem } from '@/services/inventoryService';
 import { auditService } from '@/services/auditService';
@@ -42,11 +41,11 @@ export const useUpdateProduct = () => {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({ id, updates, oldProduct }: { id: string; updates: Partial<Product>; oldProduct?: Product }) => {
+    mutationFn: async ({ id, updates, oldProduct, reason }: { id: string; updates: Partial<Product>; oldProduct?: Product; reason?: string }) => {
       const result = await inventoryService.updateProduct(id, updates);
       // Log product update
       if (oldProduct) {
-        await auditService.logProductUpdate(id, oldProduct, result);
+        await auditService.logProductUpdate(id, oldProduct, result, reason);
       }
       return result;
     },

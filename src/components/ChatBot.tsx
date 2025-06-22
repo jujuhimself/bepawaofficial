@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Badge } from '@/components/ui/badge';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { ScrollArea } from './ui/scroll-area';
+import { Badge } from './ui/badge';
 import { MessageCircle, X, Send, Bot, User, HelpCircle, TrendingUp, FileText, Stethoscope, Pill, Calculator, Users, Calendar } from 'lucide-react';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '../contexts/AuthContext';
 
 interface Message {
   id: string;
@@ -338,26 +338,38 @@ const ChatBot = () => {
       }
     };
 
-    const testKey = Object.keys(labTests).find(key => 
-      query.toLowerCase().includes(key)
-    );
-
-    if (testKey) {
-      const test = labTests[testKey as keyof typeof labTests];
+    // Enhanced: Parse pasted/uploaded result values
+    const lines = query.split('\n').map(l => l.trim()).filter(Boolean);
+    let foundAny = false;
+    let response = '';
+    lines.forEach(line => {
+      const [test, value] = line.split(':').map(s => s.trim());
+      if (test && value) {
+        const key = Object.keys(labTests).find(k => test.toLowerCase().includes(k));
+        if (key) {
+          foundAny = true;
+          const t = labTests[key as keyof typeof labTests];
+          response += `**${test}**: ${value}\n- Normal: ${t.normal}\n- Meaning: ${t.interpretation}\n- Reference: ${t.ranges}\n\n`;
+        } else {
+          response += `**${test}**: ${value}\n- (No reference found. Please consult your doctor for interpretation.)\n\n`;
+        }
+      }
+    });
+    if (foundAny) {
       return {
         id: Date.now().toString(),
         type: 'bot',
-        content: `🔬 **Lab Result Interpretation: ${testKey.charAt(0).toUpperCase() + testKey.slice(1)}**\n\n**Normal Range**: ${test.normal}\n\n**What it means**: ${test.interpretation}\n\n**Reference Ranges**: ${test.ranges}\n\n⚠️ **Note**: Always discuss results with your healthcare provider for personalized interpretation.`,
+        content: `🔬 **Lab Result Interpretation**\n\n${response}\n⚠️ **Note**: Always discuss results with your healthcare provider for personalized interpretation.`,
         timestamp: new Date(),
         suggestions: ['Book follow-up test', 'Find specialist', 'Lifestyle recommendations', 'More lab tests'],
         category: 'lab'
       };
     }
-
+    // Fallback for unknown or unparseable
     return {
       id: Date.now().toString(),
       type: 'bot',
-      content: '🔬 I can help interpret common lab test results including blood glucose, cholesterol, hemoglobin, liver function, and more. Please specify which test result you\'d like me to explain, or upload your lab report for detailed interpretation.',
+      content: '🔬 I can help interpret common lab test results including blood glucose, cholesterol, hemoglobin, liver function, and more. Please specify which test result you\'d like me to explain, or upload your lab report for detailed interpretation. If your test is not recognized, please consult your healthcare provider.',
       timestamp: new Date(),
       suggestions: ['Blood glucose', 'Cholesterol levels', 'Complete blood count', 'Liver function'],
       category: 'lab'

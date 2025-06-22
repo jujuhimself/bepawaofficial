@@ -51,9 +51,7 @@ const App = () => {
         <AuthProvider>
           <BrowserRouter>
             <ErrorBoundary>
-              <AppLayout>
-                <AppRoutes />
-              </AppLayout>
+              <AppRoutes />
             </ErrorBoundary>
           </BrowserRouter>
         </AuthProvider>
@@ -63,5 +61,3 @@ const App = () => {
 };
 
 export default App;
-
-// Consider further refactoring other long files in the project for maintainability.
