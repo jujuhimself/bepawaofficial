@@ -1,4 +1,5 @@
 import { supabase } from '../integrations/supabase/client';
+import { toast } from '../hooks/use-toast';
 
 export interface Product {
   id: string;
@@ -12,6 +13,7 @@ export interface Product {
   sell_price: number;
   pharmacy_id?: string;
   wholesaler_id?: string;
+  user_id?: string;
   is_wholesale_product?: boolean;
   is_retail_product?: boolean;
   is_public_product?: boolean;
@@ -21,21 +23,42 @@ class InventoryService {
   // For Retailers - Get their own products
   async getRetailProducts(pharmacyId: string): Promise<Product[]> {
     try {
+      // Try with user_id first (most common)
       const { data, error } = await supabase
         .from('products')
         .select('*')
-        .eq('retailer_id', pharmacyId)
+        .eq('user_id', pharmacyId)
         .eq('is_retail_product', true);
 
-      if (error) {
-        console.error('Error fetching retail products:', error);
-        // Return mock data for now
+      if (!error && data) {
+        return data;
+      }
+
+      // Fallback: try with pharmacy_id
+      const { data: fallbackData, error: fallbackError } = await supabase
+        .from('products')
+        .select('*')
+        .eq('pharmacy_id', pharmacyId)
+        .eq('is_retail_product', true);
+
+      if (fallbackError) {
+        console.error('Error fetching retail products:', fallbackError);
+        toast({
+          title: "Error",
+          description: "Failed to load products. Using mock data.",
+          variant: "destructive",
+        });
         return this.getMockRetailProducts(pharmacyId);
       }
 
-      return data || [];
+      return fallbackData || [];
     } catch (error) {
       console.error('Error in getRetailProducts:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load products. Using mock data.",
+        variant: "destructive",
+      });
       return this.getMockRetailProducts(pharmacyId);
     }
   }
@@ -43,21 +66,42 @@ class InventoryService {
   // For Wholesalers - Get their own products
   async getWholesaleProducts(wholesalerId: string): Promise<Product[]> {
     try {
+      // Try with user_id first (most common)
       const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .eq('user_id', wholesalerId)
+        .eq('is_wholesale_product', true);
+        
+      if (!error && data) {
+        return data;
+      }
+
+      // Fallback: try with wholesaler_id
+      const { data: fallbackData, error: fallbackError } = await supabase
         .from('products')
         .select('*')
         .eq('wholesaler_id', wholesalerId)
         .eq('is_wholesale_product', true);
-        
-      if (error) {
-        console.error('Error fetching wholesale products:', error);
-        // Return mock data for now
+
+      if (fallbackError) {
+        console.error('Error fetching wholesale products:', fallbackError);
+        toast({
+          title: "Error",
+          description: "Failed to load products. Using mock data.",
+          variant: "destructive",
+        });
         return this.getMockWholesaleProducts(wholesalerId);
       }
 
-      return data || [];
+      return fallbackData || [];
     } catch (error) {
       console.error('Error in getWholesaleProducts:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load products. Using mock data.",
+        variant: "destructive",
+      });
       return this.getMockWholesaleProducts(wholesalerId);
     }
   }
@@ -72,13 +116,22 @@ class InventoryService {
 
       if (error) {
         console.error('Error fetching public products:', error);
-        // Return mock data for now
+        toast({
+          title: "Error",
+          description: "Failed to load products. Using mock data.",
+          variant: "destructive",
+        });
         return this.getMockPublicProducts();
       }
 
       return data || [];
     } catch (error) {
       console.error('Error in getPublicProducts:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load products. Using mock data.",
+        variant: "destructive",
+      });
       return this.getMockPublicProducts();
     }
   }
@@ -100,6 +153,11 @@ class InventoryService {
         
         if (error) {
           console.error('Error fetching all products:', error);
+          toast({
+            title: "Error",
+            description: "Failed to load products.",
+            variant: "destructive",
+          });
           return [];
         }
         return data || [];
@@ -110,60 +168,88 @@ class InventoryService {
   
   async addRetailProduct(product: Omit<Product, 'id' | 'wholesaler_id'>): Promise<Product> {
     try {
+      const productData = {
+        ...product,
+        is_retail_product: true,
+        user_id: product.pharmacy_id, // Use user_id as primary identifier
+        pharmacy_id: product.pharmacy_id,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
       const { data, error } = await supabase
         .from('products')
-        .insert({ 
-          ...product, 
-          is_retail_product: true, 
-          retailer_id: product.pharmacy_id,
-          user_id: product.pharmacy_id // This should be the current user's ID
-        })
+        .insert(productData)
         .select()
         .single();
       
       if (error) {
         console.error('Error adding retail product:', error);
-        // Return mock data for now
-        return {
-          id: Date.now().toString(),
-          ...product,
-          is_retail_product: true,
-          retailer_id: product.pharmacy_id
-        };
+        toast({
+          title: "Error",
+          description: "Failed to add product. Please try again.",
+          variant: "destructive",
+        });
+        throw error;
       }
+      
+      toast({
+        title: "Success",
+        description: "Product added successfully!",
+      });
       
       return data;
     } catch (error) {
       console.error('Error in addRetailProduct:', error);
+      toast({
+        title: "Error",
+        description: "Failed to add product. Please try again.",
+        variant: "destructive",
+      });
       throw error;
     }
   }
   
   async addWholesaleProduct(product: Omit<Product, 'id' | 'pharmacy_id'>): Promise<Product> {
     try {
+      const productData = {
+        ...product,
+        is_wholesale_product: true,
+        user_id: product.wholesaler_id, // Use user_id as primary identifier
+        wholesaler_id: product.wholesaler_id,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
       const { data, error } = await supabase
         .from('products')
-        .insert({ 
-          ...product, 
-          is_wholesale_product: true,
-          user_id: product.wholesaler_id // This should be the current user's ID
-        })
+        .insert(productData)
         .select()
         .single();
       
       if (error) {
         console.error('Error adding wholesale product:', error);
-        // Return mock data for now
-        return {
-          id: Date.now().toString(),
-          ...product,
-          is_wholesale_product: true
-        };
+        toast({
+          title: "Error",
+          description: "Failed to add product. Please try again.",
+          variant: "destructive",
+        });
+        throw error;
       }
+      
+      toast({
+        title: "Success",
+        description: "Product added successfully!",
+      });
       
       return data;
     } catch (error) {
       console.error('Error in addWholesaleProduct:', error);
+      toast({
+        title: "Error",
+        description: "Failed to add product. Please try again.",
+        variant: "destructive",
+      });
       throw error;
     }
   }
@@ -173,7 +259,7 @@ class InventoryService {
     try {
       const { data, error } = await supabase
         .from('products')
-        .update(updates)
+        .update({ ...updates, updated_at: new Date().toISOString() })
         .eq('id', productId)
         .select()
         .single();
@@ -191,7 +277,10 @@ class InventoryService {
     try {
       const { data, error } = await supabase
         .from('products')
-        .update({ stock: newStock })
+        .update({ 
+          stock: newStock, 
+          updated_at: new Date().toISOString() 
+        })
         .eq('id', productId)
         .select()
         .single();
@@ -232,6 +321,7 @@ class InventoryService {
         buy_price: 50,
         sell_price: 100,
         pharmacy_id: pharmacyId,
+        user_id: pharmacyId,
         is_retail_product: true
       },
       {
@@ -245,6 +335,7 @@ class InventoryService {
         buy_price: 200,
         sell_price: 400,
         pharmacy_id: pharmacyId,
+        user_id: pharmacyId,
         is_retail_product: true
       }
     ];
@@ -263,6 +354,7 @@ class InventoryService {
         buy_price: 30,
         sell_price: 80,
         wholesaler_id: wholesalerId,
+        user_id: wholesalerId,
         is_wholesale_product: true
       },
       {
@@ -276,6 +368,7 @@ class InventoryService {
         buy_price: 150,
         sell_price: 300,
         wholesaler_id: wholesalerId,
+        user_id: wholesalerId,
         is_wholesale_product: true
       }
     ];
