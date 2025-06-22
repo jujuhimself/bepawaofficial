@@ -17,12 +17,62 @@ export interface Product {
   is_wholesale_product?: boolean;
   is_retail_product?: boolean;
   is_public_product?: boolean;
+  // Additional fields from database
+  manufacturer?: string;
+  requires_prescription?: boolean;
+  dosage_form?: string;
+  strength?: string;
+  pack_size?: string;
+  supplier?: string;
+  expiry_date?: string;
+  batch_number?: string;
+  last_ordered?: string;
+  status?: string;
+  image_url?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 class InventoryService {
+  // Convert database product to our Product interface
+  private mapDatabaseProduct(dbProduct: any): Product {
+    return {
+      id: dbProduct.id,
+      name: dbProduct.name,
+      category: dbProduct.category,
+      sku: dbProduct.sku,
+      description: dbProduct.description || undefined,
+      stock: dbProduct.stock || 0,
+      min_stock_level: dbProduct.min_stock_level || 0,
+      buy_price: dbProduct.buy_price || 0,
+      sell_price: dbProduct.sell_price || 0,
+      pharmacy_id: dbProduct.pharmacy_id || undefined,
+      wholesaler_id: dbProduct.wholesaler_id || undefined,
+      user_id: dbProduct.user_id || undefined,
+      is_wholesale_product: dbProduct.is_wholesale_product || undefined,
+      is_retail_product: dbProduct.is_retail_product || undefined,
+      is_public_product: dbProduct.is_public_product || undefined,
+      manufacturer: dbProduct.manufacturer || undefined,
+      requires_prescription: dbProduct.requires_prescription || undefined,
+      dosage_form: dbProduct.dosage_form || undefined,
+      strength: dbProduct.strength || undefined,
+      pack_size: dbProduct.pack_size || undefined,
+      supplier: dbProduct.supplier || undefined,
+      expiry_date: dbProduct.expiry_date || undefined,
+      batch_number: dbProduct.batch_number || undefined,
+      last_ordered: dbProduct.last_ordered || undefined,
+      status: dbProduct.status || undefined,
+      image_url: dbProduct.image_url || undefined,
+      created_at: dbProduct.created_at,
+      updated_at: dbProduct.updated_at
+    };
+  }
+
   // For Retailers - Get their own products
   async getRetailProducts(pharmacyId: string): Promise<Product[]> {
     try {
+      console.log('Fetching retail products for:', pharmacyId);
+      
       // Try with user_id first (most common)
       const { data, error } = await supabase
         .from('products')
@@ -31,7 +81,8 @@ class InventoryService {
         .eq('is_retail_product', true);
 
       if (!error && data) {
-        return data;
+        console.log('Found products with user_id:', data.length);
+        return data.map(this.mapDatabaseProduct);
       }
 
       // Fallback: try with pharmacy_id
@@ -51,7 +102,8 @@ class InventoryService {
         return this.getMockRetailProducts(pharmacyId);
       }
 
-      return fallbackData || [];
+      console.log('Found products with pharmacy_id:', fallbackData?.length || 0);
+      return (fallbackData || []).map(this.mapDatabaseProduct);
     } catch (error) {
       console.error('Error in getRetailProducts:', error);
       toast({
@@ -66,6 +118,8 @@ class InventoryService {
   // For Wholesalers - Get their own products
   async getWholesaleProducts(wholesalerId: string): Promise<Product[]> {
     try {
+      console.log('Fetching wholesale products for:', wholesalerId);
+      
       // Try with user_id first (most common)
       const { data, error } = await supabase
         .from('products')
@@ -74,7 +128,8 @@ class InventoryService {
         .eq('is_wholesale_product', true);
         
       if (!error && data) {
-        return data;
+        console.log('Found wholesale products with user_id:', data.length);
+        return data.map(this.mapDatabaseProduct);
       }
 
       // Fallback: try with wholesaler_id
@@ -94,7 +149,8 @@ class InventoryService {
         return this.getMockWholesaleProducts(wholesalerId);
       }
 
-      return fallbackData || [];
+      console.log('Found wholesale products with wholesaler_id:', fallbackData?.length || 0);
+      return (fallbackData || []).map(this.mapDatabaseProduct);
     } catch (error) {
       console.error('Error in getWholesaleProducts:', error);
       toast({
@@ -109,6 +165,7 @@ class InventoryService {
   // For Individuals - Get public products
   async getPublicProducts(): Promise<Product[]> {
     try {
+      console.log('Fetching public products');
       const { data, error } = await supabase
         .from('products')
         .select('*')
@@ -124,7 +181,8 @@ class InventoryService {
         return this.getMockPublicProducts();
       }
 
-      return data || [];
+      console.log('Found public products:', data?.length || 0);
+      return (data || []).map(this.mapDatabaseProduct);
     } catch (error) {
       console.error('Error in getPublicProducts:', error);
       toast({
@@ -160,7 +218,7 @@ class InventoryService {
           });
           return [];
         }
-        return data || [];
+        return (data || []).map(this.mapDatabaseProduct);
       default:
         return [];
     }
@@ -168,14 +226,29 @@ class InventoryService {
   
   async addRetailProduct(product: Omit<Product, 'id' | 'wholesaler_id'>): Promise<Product> {
     try {
+      console.log('Adding retail product:', product);
+      
+      if (!product.pharmacy_id) {
+        throw new Error('Pharmacy ID is required');
+      }
+
       const productData = {
-        ...product,
+        name: product.name,
+        category: product.category,
+        sku: product.sku,
+        description: product.description || null,
+        stock: product.stock,
+        min_stock_level: product.min_stock_level,
+        buy_price: product.buy_price,
+        sell_price: product.sell_price,
         is_retail_product: true,
-        user_id: product.pharmacy_id, // Use user_id as primary identifier
+        user_id: product.pharmacy_id,
         pharmacy_id: product.pharmacy_id,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       };
+
+      console.log('Product data to insert:', productData);
 
       const { data, error } = await supabase
         .from('products')
@@ -187,18 +260,19 @@ class InventoryService {
         console.error('Error adding retail product:', error);
         toast({
           title: "Error",
-          description: "Failed to add product. Please try again.",
+          description: `Failed to add product: ${error.message}`,
           variant: "destructive",
         });
-        throw error;
+        throw new Error(error.message);
       }
       
+      console.log('Product added successfully:', data);
       toast({
         title: "Success",
         description: "Product added successfully!",
       });
       
-      return data;
+      return this.mapDatabaseProduct(data);
     } catch (error) {
       console.error('Error in addRetailProduct:', error);
       toast({
@@ -212,14 +286,29 @@ class InventoryService {
   
   async addWholesaleProduct(product: Omit<Product, 'id' | 'pharmacy_id'>): Promise<Product> {
     try {
+      console.log('Adding wholesale product:', product);
+      
+      if (!product.wholesaler_id) {
+        throw new Error('Wholesaler ID is required');
+      }
+
       const productData = {
-        ...product,
+        name: product.name,
+        category: product.category,
+        sku: product.sku,
+        description: product.description || null,
+        stock: product.stock,
+        min_stock_level: product.min_stock_level,
+        buy_price: product.buy_price,
+        sell_price: product.sell_price,
         is_wholesale_product: true,
-        user_id: product.wholesaler_id, // Use user_id as primary identifier
+        user_id: product.wholesaler_id,
         wholesaler_id: product.wholesaler_id,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       };
+
+      console.log('Product data to insert:', productData);
 
       const { data, error } = await supabase
         .from('products')
@@ -231,18 +320,19 @@ class InventoryService {
         console.error('Error adding wholesale product:', error);
         toast({
           title: "Error",
-          description: "Failed to add product. Please try again.",
+          description: `Failed to add product: ${error.message}`,
           variant: "destructive",
         });
-        throw error;
+        throw new Error(error.message);
       }
       
+      console.log('Product added successfully:', data);
       toast({
         title: "Success",
         description: "Product added successfully!",
       });
       
-      return data;
+      return this.mapDatabaseProduct(data);
     } catch (error) {
       console.error('Error in addWholesaleProduct:', error);
       toast({
@@ -265,7 +355,7 @@ class InventoryService {
         .single();
       
       if (error) throw error;
-      return data;
+      return this.mapDatabaseProduct(data);
     } catch (error) {
       console.error('Error in updateProduct:', error);
       throw error;
@@ -286,7 +376,7 @@ class InventoryService {
         .single();
       
       if (error) throw error;
-      return data;
+      return this.mapDatabaseProduct(data);
     } catch (error) {
       console.error('Error in updateStock:', error);
       throw error;

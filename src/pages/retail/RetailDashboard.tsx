@@ -53,7 +53,6 @@ const useRetailDashboardData = (pharmacyId: string | undefined) => {
     });
 };
 
-
 export default function RetailDashboard() {
   const { user } = useAuth();
   const { data, isLoading, isError, error } = useRetailDashboardData(user?.id);
@@ -65,6 +64,9 @@ export default function RetailDashboard() {
   if (isError) {
     return <EmptyState title="Failed to Load Dashboard" description={error instanceof Error ? error.message : 'An unknown error occurred.'} icon={<Package />} />;
   }
+
+  // Provide default values to prevent undefined errors
+  const salesData = data?.salesData || { totalRevenue: 0, salesToday: 0, totalOrders: 0 };
 
   return (
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
@@ -78,7 +80,7 @@ export default function RetailDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              ${data?.salesData.totalRevenue.toLocaleString()}
+              ${salesData.totalRevenue.toLocaleString()}
             </div>
           </CardContent>
         </Card>
@@ -88,7 +90,7 @@ export default function RetailDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              ${data?.salesData.salesToday.toLocaleString()}
+              ${salesData.salesToday.toLocaleString()}
             </div>
           </CardContent>
         </Card>
@@ -97,7 +99,15 @@ export default function RetailDashboard() {
             <CardTitle>Total Orders</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{data?.salesData.totalOrders}</div>
+            <div className="text-2xl font-bold">{salesData.totalOrders}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Low Stock Alerts</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{data?.lowStockAlerts?.length || 0}</div>
           </CardContent>
         </Card>
       </div>
