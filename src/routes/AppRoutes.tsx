@@ -56,6 +56,8 @@ import LabResults from "../pages/lab/LabResults";
 import AdminDashboard from "../pages/AdminDashboard";
 import AdminAnalytics from "../pages/AdminAnalytics";
 import AdminStaffManagement from '../pages/admin/StaffManagement';
+import AdminSystemMonitoring from '../pages/admin/AdminSystemMonitoring';
+import AdminAuditLogs from '../pages/admin/AuditLogs';
 
 // Common Pages
 import SystemSettings from "../pages/SystemSettings";
@@ -124,9 +126,13 @@ const AppRoutes = () => {
         <Route path="lab/results" element={<RouteGuard allowedRoles={['lab']}><LabResults /></RouteGuard>} />
 
         {/* Admin Routes */}
+        <Route path="admin" element={<Navigate to="/admin/dashboard" replace />} />
         <Route path="admin/dashboard" element={<RouteGuard allowedRoles={['admin']}><AdminDashboard /></RouteGuard>} />
         <Route path="admin/analytics" element={<RouteGuard allowedRoles={['admin']}><AdminAnalytics /></RouteGuard>} />
         <Route path="admin/users" element={<RouteGuard allowedRoles={['admin']}><AdminStaffManagement /></RouteGuard>} />
+        <Route path="admin/staff-management" element={<RouteGuard allowedRoles={['admin']}><AdminStaffManagement /></RouteGuard>} />
+        <Route path="admin/system-monitoring" element={<RouteGuard allowedRoles={['admin']}><AdminSystemMonitoring /></RouteGuard>} />
+        <Route path="admin/audit-logs" element={<RouteGuard allowedRoles={['admin']}><AdminAuditLogs /></RouteGuard>} />
 
         {/* Common Routes */}
         <Route path="settings" element={<SystemSettings />} />

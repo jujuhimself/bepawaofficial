@@ -7,15 +7,17 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { DatePickerWithRange } from "@/components/ui/date-range-picker";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { inventoryForecastService, InventoryForecast } from "@/services/inventoryForecastService";
+import { inventoryService, Product } from "@/services/inventoryService";
+import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
+import { User } from "@/contexts/AuthContext";
 
-interface Product {
-  id: string;
-  name: string;
+interface InventoryForecastsProps {
+  user: User;
 }
 
-export function InventoryForecasts() {
+export function InventoryForecasts({ user }: InventoryForecastsProps) {
   const [forecasts, setForecasts] = useState<InventoryForecast[]>([]);
   const [filteredForecasts, setFilteredForecasts] = useState<InventoryForecast[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -26,12 +28,8 @@ export function InventoryForecasts() {
 
   useEffect(() => {
     loadForecasts();
-    // TODO: Load products from inventory service
-    setProducts([
-      { id: "1", name: "Product 1" },
-      { id: "2", name: "Product 2" },
-    ]);
-  }, []);
+    loadProducts();
+  }, [user]);
 
   useEffect(() => {
     filterForecasts();
@@ -45,6 +43,20 @@ export function InventoryForecasts() {
       toast({
         title: "Error",
         description: "Failed to load forecasts",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const loadProducts = async () => {
+    if (!user) return;
+    try {
+      const userProducts = await inventoryService.getProductsByRole(user.id, user.role);
+      setProducts(userProducts);
+    } catch (error) {
+       toast({
+        title: "Error",
+        description: "Failed to load products for forecasting.",
         variant: "destructive",
       });
     }
@@ -80,13 +92,12 @@ export function InventoryForecasts() {
       <Card>
         <CardHeader>
           <CardTitle>Inventory Forecasts</CardTitle>
-          <div className="flex flex-wrap gap-4">
+          <div className="flex flex-wrap items-center gap-4">
             <Select value={selectedProduct} onValueChange={setSelectedProduct}>
               <SelectTrigger className="w-[200px]">
                 <SelectValue placeholder="Select Product" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Products</SelectItem>
                 {products.map((product) => (
                   <SelectItem key={product.id} value={product.id}>
                     {product.name}
@@ -94,6 +105,7 @@ export function InventoryForecasts() {
                 ))}
               </SelectContent>
             </Select>
+            <Button variant="outline" size="sm" onClick={() => setSelectedProduct("")} disabled={!selectedProduct}>Clear</Button>
             <DatePickerWithRange date={dateRange} onDateChange={setDateRange} />
             <Button
               variant="outline"
@@ -140,23 +152,32 @@ export function InventoryForecasts() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredForecasts.map((forecast) => {
-                const accuracy = forecast.actual
-                  ? (100 - Math.abs((forecast.forecasted_demand - forecast.actual) / forecast.actual) * 100).toFixed(1)
-                  : "-";
-                return (
-                  <TableRow key={forecast.id}>
-                    <TableCell>
-                      {format(new Date(forecast.forecast_date), "MMM d, yyyy")}
-                    </TableCell>
-                    <TableCell>
-                      {products.find((p) => p.id === forecast.product_id)?.name || forecast.product_id}
-                    </TableCell>
-                    <TableCell className="text-right">{forecast.forecasted_demand}</TableCell>
-                    <TableCell className="text-right">{forecast.actual || "-"}</TableCell>
-                    <TableCell className="text-right">{accuracy}</TableCell>
-                  </TableRow>
-                )}
+              {filteredForecasts.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center">
+                    No forecast data available for the selected filters.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredForecasts.map((forecast) => {
+                  const accuracy = forecast.actual
+                    ? (100 - Math.abs((forecast.forecasted_demand - forecast.actual) / forecast.actual) * 100).toFixed(1)
+                    : "-";
+                  const product = products.find((p) => p.id === forecast.product_id);
+                  return (
+                    <TableRow key={forecast.id}>
+                      <TableCell>
+                        {format(new Date(forecast.forecast_date), "MMM d, yyyy")}
+                      </TableCell>
+                      <TableCell>
+                        {product?.name || forecast.product_id}
+                      </TableCell>
+                      <TableCell className="text-right">{forecast.forecasted_demand}</TableCell>
+                      <TableCell className="text-right">{forecast.actual || "-"}</TableCell>
+                      <TableCell className="text-right">{accuracy}%</TableCell>
+                    </TableRow>
+                  )
+                })
               )}
             </TableBody>
           </Table>
